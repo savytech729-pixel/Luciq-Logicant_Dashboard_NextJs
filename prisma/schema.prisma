@@ -7,31 +7,169 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  CANDIDATE
+  ADMIN
+  RECRUITER
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+}
+
+enum PlacementStatus {
+  UNBILLED
+  PENDING
+  PAID
+}
+
 model User {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  email     String   @unique
+  id        String     @id @default(auto()) @map("_id") @db.ObjectId
+  email     String     @unique
   password  String
-  role      String   // "CANDIDATE" | "ADMIN"
-  createdAt DateTime @default(now())
+  role      UserRole
+  createdAt DateTime   @default(now())
+
+  candidate Candidate?
+  recruiter Recruiter?
+  jobs      Job[]
+
+  clientId  String?    @db.ObjectId
+  client    Client?    @relation(fields: [clientId], references: [id])
 }
 
 model Candidate {
   id              String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId          String   @db.ObjectId
+  userId          String   @unique @db.ObjectId
+  user            User     @relation(fields: [userId], references: [id])
+
+  // ── Core Profile ──────────────────────────────────────
   name            String
-  experienceYears Int
   currentRole     String
+  totalExperience Float?   // e.g. 5.5 years
+  experienceYears Int      // Legacy compatibility
   skills          String[]
+
+  // ── Recruitment Details ──────────────────────────────
+  phone           String?  // Needed for WhatsApp Invites
+  cvUrl           String?  // Document analyzed by AI
+  linkedInUrl     String?
+  currentSalary   String?  // e.g. "₹12L p.a."
+  expectedSalary  String?  // e.g. "₹18L p.a."
+  noticePeriod    String?  // e.g. "60 Days" | "Immediate"
+  preferredLocation String? // e.g. "Mumbai / Pune"
+  workSettingPreference String? // "Remote" | "Hybrid" | "On-site"
+  isReadyToJoin   Boolean  @default(true)
+
   createdAt       DateTime @default(now())
+}
+
+model Recruiter {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @unique @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
+
+  name      String
+  jobTitle  String   // e.g. "Lead Talent Partner", "Technical Screener"
+  scope     String   // e.g. "Global Admin", "Restricted (Engineering)"
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
 }
 
 model Job {
   id                 String   @id @default(auto()) @map("_id") @db.ObjectId
+
+  // ── Core ───────────────────────────────────────────────
   title              String
   description        String
+  department         String?  // e.g. "Engineering", "Finance"
+  clientName         String?  // Client company this role is for
+  openPositions      Int      @default(1)
+  status             String   @default("Active") // "Active" | "On Hold" | "Closed"
+
+  // ── Matching ──────────────────────────────────────────
   requiredSkills     String[]
   experienceRequired Int
-  location           String?
+  salaryRange        String?  // e.g. "₹12L – ₹18L p.a."
+
+  // ── Logistics ─────────────────────────────────────────
+  location           String?  // Full address, e.g. "Andheri, Mumbai"
+  workSetting        String?  // "On-site" | "Hybrid" | "Remote"
+  positionType       String?  // "Permanent" | "Contract" | "Contract-to-Hire (CTH)"
+  category           String?  // "IT" | "Non-IT"
+
+  // ── Interview & Availability ───────────────────────────
+  interviewMode      String?  // e.g. "1st Virtual / 2nd In-person"
+  noticePeriod       String?  // e.g. "Immediate" | "30 Days" | "60 Days" | "Negotiable"
+  buyoutAllowed      Boolean  @default(false)
+
+  // ── Meta ──────────────────────────────────────────────
+  clientId           String?  @db.ObjectId
   createdBy          String   @db.ObjectId
+  creator            User     @relation(fields: [createdBy], references: [id])
   createdAt          DateTime @default(now())
+
+  matches            PipelineMatch[]
+}
+
+model PipelineMatch {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  jobId           String   @db.ObjectId
+  candidateId     String   @db.ObjectId
+
+  job             Job      @relation(fields: [jobId], references: [id])
+  
+  status          String   @default("REVEALED") // REVEALED | SCREENING | SHORTLISTED | SELECTED | REJECTED
+  score           Int?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Client {
+  id        String      @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  region    String
+  plan      String      // "Enterprise" | "Pro"
+  status    String      // "Active" | "Pending Provisioning"
+  createdAt DateTime    @default(now())
+
+  placements Placement[]
+  users      User[]
+}
+
+model Placement {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+
+  candidateId     String   @db.ObjectId
+  jobId           String   @db.ObjectId
+  clientId        String   @db.ObjectId
+
+  client          Client   @relation(fields: [clientId], references: [id])
+
+  candidateName   String
+  jobTitle        String
+  clientName      String
+
+  hireDate        DateTime
+  baseSalary      Float
+  feePercentage   Float
+
+  status          PlacementStatus
+  invoices        Invoice[]
+  createdAt       DateTime @default(now())
+}
+
+model Invoice {
+  id          String        @id @default(auto()) @map("_id") @db.ObjectId
+  placementId String        @db.ObjectId
+
+  placement   Placement     @relation(fields: [placementId], references: [id])
+
+  amount      Float
+  status      InvoiceStatus
+
+  createdAt   DateTime      @default(now())
 }
