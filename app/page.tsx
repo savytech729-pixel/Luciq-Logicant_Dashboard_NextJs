@@ -52,15 +52,11 @@ export default function Home() {
              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8, delay: 0.3 }}
              className="flex flex-col sm:flex-row gap-5 justify-center"
            >
-             <Link href="/register">
-               <button className="bg-blue-600 hover:bg-blue-500 text-white font-semibold py-4 px-8 rounded-full shadow-[0_0_30px_rgba(37,99,235,0.3)] transition-all flex items-center justify-center w-full sm:w-auto">
+             <Link href="/register" className="bg-blue-600 hover:bg-blue-500 text-white font-semibold py-4 px-8 rounded-full shadow-[0_0_30px_rgba(37,99,235,0.3)] transition-all flex items-center justify-center w-full sm:w-auto">
                  Deploy Enterprise Hub <ArrowRight className="ml-2 w-5 h-5" />
-               </button>
              </Link>
-             <Link href="/login">
-               <button className="bg-white/5 border border-white/10 hover:bg-white/10 text-white font-medium py-4 px-8 rounded-full transition-all flex items-center justify-center w-full sm:w-auto">
+             <Link href="/login" className="bg-white/5 border border-white/10 hover:bg-white/10 text-white font-medium py-4 px-8 rounded-full transition-all flex items-center justify-center w-full sm:w-auto">
                  Access Candidate Portal
-               </button>
              </Link>
            </motion.div>
         </div>
