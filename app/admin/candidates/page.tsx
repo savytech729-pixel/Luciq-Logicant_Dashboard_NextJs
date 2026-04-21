@@ -319,7 +319,7 @@ export default function AdminCandidatesPage() {
                                    </div>
                                    {res.status === 'pending' && <Loader2 className="w-3.5 h-3.5 text-blue-500 animate-spin" />}
                                    {res.status === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
-                                   {res.status === 'error' && <AlertCircle className="w-4 h-4 text-red-500" title={res.error} />}
+                                   {res.status === 'error' && <AlertCircle className="w-4 h-4 text-red-500" />}
                                 </div>
                              ))}
                           </div>

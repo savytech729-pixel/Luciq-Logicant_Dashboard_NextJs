@@ -84,7 +84,8 @@ export default function CandidateProfile() {
         setParseStep(3) // Mapping Skill Taxonomies
         await new Promise(r => setTimeout(r, 800))
 
-        setFormData({
+        setFormData(prev => ({
+          ...prev,
           name: data.candidate.name || '',
           currentRole: data.candidate.currentRole || '',
           experienceYears: Number(data.candidate.totalExperience || data.candidate.experienceYears || 0),
@@ -95,7 +96,7 @@ export default function CandidateProfile() {
           expectedSalary: data.candidate.expectedSalary || '',
           workSettingPreference: data.candidate.workSettingPreference || 'Remote',
           linkedInUrl: data.candidate.linkedInUrl || ''
-        })
+        }))
         setSkillInput(Array.isArray(data.candidate.skills) ? data.candidate.skills.join(', ') : '')
         
         setParseStep(4) // Complete
