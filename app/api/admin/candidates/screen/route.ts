@@ -11,7 +11,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { fileName, fileSize } = await req.json()
+    const { fileName, fileSize, content } = await req.json()
 
     if (!fileName) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     }
 
     // 2. Real AI Resume Parsing
-    const extraction = await parseResume(fileName)
+    const extraction = await parseResume(fileName, content)
 
     if (!extraction) {
       return NextResponse.json({ error: 'AI Parsing failed' }, { status: 500 })

@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import {
   BrainCircuit, Search, Filter, UploadCloud, FileText, CheckCircle2,
   Zap, Plus, Mail, MapPin, Clock, Banknote, UserPlus, Loader2,
-  AlertCircle, ChevronRight, Briefcase, Calendar, Target, Users
+  AlertCircle, ChevronRight, Briefcase, Calendar, Target, Users, X
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTalent } from '@/lib/hooks/useTalent'
@@ -99,11 +99,22 @@ export default function AdminCandidatesPage() {
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
         try {
+          // Read file content
+          const reader = new FileReader()
+          const fileContent = await new Promise<string>((resolve) => {
+            reader.onload = (e) => resolve(e.target?.result as string || "")
+            reader.readAsText(file)
+          })
+
           // 1. Screen/Parse
           const screenRes = await fetch('/api/admin/candidates/screen', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fileName: file.name, fileSize: file.size })
+            body: JSON.stringify({ 
+              fileName: file.name, 
+              fileSize: file.size,
+              content: fileContent.slice(0, 8000) // First 8k for bulk
+            })
           })
           const screenData = await screenRes.json()
           if (!screenRes.ok) throw new Error(screenData.message || 'Parse failed')
@@ -126,6 +137,7 @@ export default function AdminCandidatesPage() {
         count++
         setProcessedCount(count)
       }
+
     } else {
       // Single Mode
       const file = files[0]
@@ -134,13 +146,24 @@ export default function AdminCandidatesPage() {
       
       try {
         setParseStep(1) // Semantic Vectorization
-        await new Promise(r => setTimeout(r, 800))
+        
+        // Read file content for real AI parsing
+        const reader = new FileReader()
+        const fileContent = await new Promise<string>((resolve) => {
+          reader.onload = (e) => resolve(e.target?.result as string || "")
+          reader.readAsText(file)
+        })
+
         setParseStep(2) // Classification
         
         const res = await fetch('/api/admin/candidates/screen', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileName: file.name, fileSize: file.size })
+          body: JSON.stringify({ 
+            fileName: file.name, 
+            fileSize: file.size,
+            content: fileContent.slice(0, 10000) // Send first 10k chars for parsing
+          })
         })
         const data = await res.json()
 
@@ -277,12 +300,28 @@ export default function AdminCandidatesPage() {
                <Zap className="mr-2 h-4 w-4 text-blue-400" /> Rapid AI Screener
              </DialogTrigger>
              <DialogContent className="glass-card border border-white/10 text-white sm:max-w-xl p-0 overflow-hidden">
+                <button 
+                  onClick={() => setIsScreenerOpen(false)}
+                  className="absolute top-4 right-4 z-[60] p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all pointer-events-auto"
+                >
+                   <X className="w-4 h-4" />
+                </button>
                 <div className="p-8 relative z-10 space-y-6">
                    <DialogHeader><DialogTitle className="text-2xl font-bold text-white flex items-center"><BrainCircuit className="w-6 h-6 mr-3 text-blue-500" /> Smart CV Matcher</DialogTitle></DialogHeader>
 
                    <AnimatePresence mode="wait">
                      {screenerState === 'idle' && (
-                       <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }} onDragLeave={() => setIsDragging(false)} onDrop={handleFileUpload} onClick={() => fileInputRef.current?.click()} className={`border-2 border-dashed ${isDragging ? 'border-blue-500 bg-blue-500/10' : 'border-white/10 hover:border-white/20 bg-white/[0.02]'} rounded-2xl p-12 text-center cursor-pointer transition-all flex flex-col items-center group`}>
+                       <motion.div 
+                         key="idle" 
+                         initial={{ opacity: 0 }} 
+                         animate={{ opacity: 1 }} 
+                         exit={{ opacity: 0 }} 
+                         onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true) }} 
+                         onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false) }} 
+                         onDrop={handleFileUpload} 
+                         onClick={() => fileInputRef.current?.click()} 
+                         className={`border-2 border-dashed ${isDragging ? 'border-blue-500 bg-blue-500/10' : 'border-white/10 hover:border-white/20 bg-white/[0.02]'} rounded-2xl p-12 text-center cursor-pointer transition-all flex flex-col items-center group`}
+                       >
                          <input type="file" multiple className="hidden" ref={fileInputRef} onChange={handleFileUpload} accept=".pdf,.doc,.docx,.txt" />
                          <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><UploadCloud className="w-8 h-8 text-blue-400" /></div>
                          <h3 className="text-white font-bold text-lg mb-1">Drop CVs Here</h3>
