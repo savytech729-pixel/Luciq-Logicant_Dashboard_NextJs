@@ -120,7 +120,7 @@ export default function JobMatches() {
   if (loading || initialLoading) return (
     <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
       <BrainCircuit className="h-8 w-8 text-blue-500 animate-pulse" />
-      <p className="text-slate-400">Computing multidimensional match vectors...</p>
+      <p className="text-slate-400">Analyzing candidate matches...</p>
     </div>
   )
 
@@ -137,15 +137,15 @@ export default function JobMatches() {
           </Link>
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-blue-500 px-2 py-0.5 rounded bg-blue-500/10">EasyHire Platform</span>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Live Requisition</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-blue-500 px-2 py-0.5 rounded bg-blue-500/10">Talent Platform</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Active Vacancy</span>
             </div>
             <h1 className="text-4xl font-black tracking-tight text-white flex items-center">
               {job?.title || 'Applicant Tracking'}
             </h1>
             <p className="text-slate-400 mt-1 flex items-center gap-2">
               <Target className="w-4 h-4 text-blue-400" />
-              {matches.length} candidates identified by AI Matcher
+              {matches.length} candidates matched by AI
             </p>
           </div>
         </div>
@@ -155,7 +155,7 @@ export default function JobMatches() {
       <div className="space-y-6">
         {matches.length === 0 ? (
           <Card className="glass-card text-center py-20 bg-white/[0.01] border-dashed">
-            <p className="text-slate-500 font-medium">No candidates have met the AI confidence threshold yet.</p>
+            <p className="text-slate-500 font-medium">No candidate matches found yet.</p>
           </Card>
         ) : (
           matches.map((candidate, index) => {
@@ -209,7 +209,7 @@ export default function JobMatches() {
                        <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
                             <Zap className="w-4 h-4 text-amber-400 fill-amber-400" />
-                            <span className="text-xs font-black uppercase tracking-widest text-slate-200">Confidence Matrix</span>
+                            <span className="text-xs font-black uppercase tracking-widest text-slate-200">Match Score</span>
                           </div>
                           <span className="text-2xl font-black text-white">{candidate.score}%</span>
                        </div>
@@ -225,7 +225,7 @@ export default function JobMatches() {
                     {/* Right: Quick Actions */}
                     <div className="w-full lg:w-[280px] p-6 flex flex-col justify-between bg-white/[0.02]">
                        <div className="space-y-2">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Instant Outreach</p>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Contact Candidate</p>
                           <div className="grid grid-cols-2 gap-2">
                              <button 
                                onClick={() => handleInvite(candidate.id, 'whatsapp')}
@@ -367,7 +367,7 @@ export default function JobMatches() {
             <DialogHeader>
                <DialogTitle className="flex items-center gap-2">
                   <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                  Confirm Placement
+                  Confirm Hiring
                </DialogTitle>
             </DialogHeader>
             

@@ -3,10 +3,11 @@ import { prisma } from '@/lib/prisma'
 export const dashboardService = {
   async getAdminStats() {
     try {
-      const [candidatesCount, jobsCount, placementsResult] = await Promise.all([
+      const [candidatesCount, jobsCount, placementsResult, aiFraudCount] = await Promise.all([
         (prisma as any).$runCommandRaw({ count: 'Candidate' }),
         (prisma as any).$runCommandRaw({ count: 'Job' }),
-        (prisma as any).$runCommandRaw({ find: 'Placement' })
+        (prisma as any).$runCommandRaw({ find: 'Placement' }),
+        prisma.pipelineMatch.count({ where: { isAIUsageDetected: true } })
       ])
 
       const placements = (placementsResult as any)?.cursor?.firstBatch ?? []
@@ -23,6 +24,7 @@ export const dashboardService = {
       return {
         candidates: (candidatesCount as any)?.n ?? 0,
         jobs: (jobsCount as any)?.n ?? 0,
+        aiFraudAlerts: aiFraudCount,
         placementYield: `₹${(totalRevenue / 10000000).toFixed(2)}Cr`,
         matchVelocity: '4.2s', // AI engine overhead
         pipelineData,

@@ -17,13 +17,13 @@ export default function CandidateDashboard() {
     <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-700">
       <div className="flex justify-between items-end">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight text-white mb-2">My Intelligence Profile</h1>
-          <p className="text-slate-400">Keep your datasets updated to increase ranking latency.</p>
+          <h1 className="text-4xl font-bold tracking-tight text-white mb-2">My Career Dashboard</h1>
+          <p className="text-slate-400">Keep your profile updated to increase your job match chances.</p>
         </div>
         {candidate && (
           <Link href="/candidate/profile">
             <button className="hidden sm:flex px-4 py-2 bg-white/[0.05] border border-white/10 hover:bg-white/10 rounded-lg text-sm text-white transition-colors">
-              Update Profile Data
+              Edit My Profile
             </button>
           </Link>
         )}
@@ -42,12 +42,12 @@ export default function CandidateDashboard() {
                 </div>
                 <div>
                    <h3 className="text-2xl font-black text-white tracking-tight">Congratulations, {candidate.name}!</h3>
-                   <p className="text-slate-300 font-medium">You have been selected for a premium role. Our talent partners will coordinate the next phase.</p>
+                   <p className="text-slate-300 font-medium">You have been selected for a role. Our team will contact you for the next steps.</p>
                 </div>
              </div>
              <Link href="/candidate/jobs" className="flex-shrink-0">
                 <button className="px-6 py-3 bg-white text-black font-black text-sm rounded-xl hover:bg-emerald-50 transition-all shadow-xl shadow-white/10 flex items-center gap-2 group">
-                   Schedule Briefing <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                   View Next Steps <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </button>
              </Link>
           </div>
@@ -58,15 +58,15 @@ export default function CandidateDashboard() {
         <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
           <Card className="glass-card overflow-hidden">
             <CardHeader>
-              <CardTitle className="text-xl text-white">Initialization Required</CardTitle>
+              <CardTitle className="text-xl text-white">Profile Setup Required</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-slate-400">
-                You must complete your candidate schema mapping to become visible to the matching engine.
+                You must complete your profile setup to become visible to recruiters and companies.
               </p>
               <Link href="/candidate/profile" className="inline-block mt-2">
                 <button className="btn-primary">
-                  Go to Setup Phase
+                  Start Profile Setup
                 </button>
               </Link>
             </CardContent>
@@ -94,7 +94,7 @@ export default function CandidateDashboard() {
                   </div>
                   <div>
                     <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center">
-                      <Code2 className="w-4 h-4 mr-2" /> Top Mapped Skills
+                      <Code2 className="w-4 h-4 mr-2" /> Top Skills
                     </h4>
                     <div className="flex flex-wrap gap-2">
                       {candidate.skills.slice(0, 5).map((skill: string) => (
@@ -115,16 +115,16 @@ export default function CandidateDashboard() {
               <CardHeader>
                 <CardTitle className="flex items-center text-white text-lg">
                   <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse mr-3 shadow-[0_0_8px_#2563eb]" />
-                  Active Model
+                  Profile Status
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-slate-400 text-sm leading-relaxed">
-                  Your profile has been fully indexed. You are currently visible in {candidate.matches?.length || 0} active requisition searches.
+                  Your profile is active. You are currently being considered for {candidate.matches?.length || 0} open positions.
                 </p>
                 <Link href="/candidate/profile" className="block w-full">
                   <button className="w-full text-center px-4 py-2 bg-white/[0.03] hover:bg-white/10 border border-white/10 rounded-lg text-sm text-white transition-colors mt-2">
-                    Update Profile Data
+                    Update My Profile
                   </button>
                 </Link>
               </CardContent>
@@ -137,15 +137,15 @@ export default function CandidateDashboard() {
               <CardHeader className="border-b border-white/5 px-8 py-6">
                 <div className="flex items-center justify-between">
                    <CardTitle className="text-xl font-bold text-white flex items-center gap-3">
-                      <Target className="w-5 h-5 text-blue-500" /> Live Recruitment Tracker
+                      <Target className="w-5 h-5 text-blue-500" /> My Application Tracker
                    </CardTitle>
-                   <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Real-time Pipeline Sync</span>
+                   <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Live Status Updates</span>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
                 {(!candidate.matches || candidate.matches.length === 0) ? (
                    <div className="p-12 text-center">
-                      <p className="text-slate-500 italic">No active recruitment matching sequences detected for your profile yet.</p>
+                      <p className="text-slate-500 italic">You haven't applied to any jobs yet.</p>
                    </div>
                 ) : (
                    <div className="divide-y divide-white/5">
@@ -157,20 +157,23 @@ export default function CandidateDashboard() {
                               </div>
                               <div>
                                  <div className="flex items-center gap-2 mb-1">
-                                    <span className="text-sm font-bold text-white">Matched Requisition #{idx + 1}</span>
+                                    <span className="text-sm font-bold text-white">{match.jobTitle}</span>
                                     <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest border ${
                                       match.status === 'SELECTED' ? 'bg-green-500/10 border-green-500/30 text-green-400 shadow-[0_0_8px_rgba(16,185,129,0.2)]' :
                                       match.status === 'SHORTLISTED' ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' :
+                                      match.status === 'REJECTED' ? 'bg-red-500/10 border-red-500/30 text-red-400' :
                                       'bg-white/5 border-white/10 text-slate-400'
                                     }`}>
                                       {match.status}
                                     </span>
                                  </div>
                                  <div className="flex items-center gap-4 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-                                    <span className="flex items-center gap-1.5"><Zap className="w-3 h-3 text-amber-500" /> AI Score: {match.score}%</span>
-                                    <span className="flex items-center gap-1.5"><Clock className="w-3 h-3" /> Updated {new Date(match.updatedAt).toLocaleDateString()}</span>
+                                    <span className="text-slate-400 font-black">{match.clientName}</span>
+                                    <span className="flex items-center gap-1.5"><Zap className="w-3 h-3 text-amber-500" /> Match: {match.score}%</span>
+                                    <span className="flex items-center gap-1.5"><Clock className="w-3 h-3" /> {new Date(match.updatedAt).toLocaleDateString()}</span>
                                  </div>
                               </div>
+
                            </div>
                            <Link href="/candidate/jobs">
                               <button className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all">

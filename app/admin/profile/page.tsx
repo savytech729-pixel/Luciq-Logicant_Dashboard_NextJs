@@ -5,13 +5,17 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import {
   User, Mail, Shield, Calendar, Lock, CheckCircle2,
   AlertCircle, Loader2, Edit3, Save, X, ShieldCheck,
-  Activity, Clock, KeyRound, Eye, EyeOff
+  Activity, Clock, KeyRound, Eye, EyeOff, Building2
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 interface AdminUser {
   id: string
   email: string
+  name?: string
+  phone?: string
+  jobTitle?: string
+  department?: string
   role: string
   createdAt: string
 }
@@ -23,10 +27,18 @@ export default function AdminProfilePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [alert, setAlert] = useState<AlertType>(null)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   // Email edit
   const [editingEmail, setEditingEmail] = useState(false)
   const [emailDraft, setEmailDraft] = useState('')
+  
+  // Personal Info edit
+  const [editingPersonal, setEditingPersonal] = useState(false)
+  const [nameDraft, setNameDraft] = useState('')
+  const [phoneDraft, setPhoneDraft] = useState('')
+  const [jobTitleDraft, setJobTitleDraft] = useState('')
+  const [departmentDraft, setDepartmentDraft] = useState('')
 
   // Password change
   const [editingPassword, setEditingPassword] = useState(false)
@@ -48,10 +60,20 @@ export default function AdminProfilePage() {
         if (data.user) {
           setUser(data.user)
           setEmailDraft(data.user.email)
+          setNameDraft(data.user.name || '')
+          setPhoneDraft(data.user.phone || '')
+          setJobTitleDraft(data.user.jobTitle || '')
+          setDepartmentDraft(data.user.department || '')
+        } else {
+          setErrorMsg(data.error || 'User data missing from response')
         }
         setLoading(false)
       })
-      .catch(() => setLoading(false))
+      .catch((err) => {
+        console.error('Fetch error:', err)
+        setErrorMsg('Network error or server is down')
+        setLoading(false)
+      })
   }, [])
 
   const handleSaveEmail = async () => {
@@ -71,6 +93,26 @@ export default function AdminProfilePage() {
       setUser(data.user)
       setEditingEmail(false)
       flashAlert({ type: 'success', message: 'Email updated successfully.' })
+    } catch (err: any) {
+      flashAlert({ type: 'error', message: err.message })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSavePersonal = async () => {
+    setSaving(true)
+    try {
+      const res = await fetch('/api/admin/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: nameDraft, phone: phoneDraft, jobTitle: jobTitleDraft, department: departmentDraft }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setUser(data.user)
+      setEditingPersonal(false)
+      flashAlert({ type: 'success', message: 'Personal information updated.' })
     } catch (err: any) {
       flashAlert({ type: 'error', message: err.message })
     } finally {
@@ -134,8 +176,15 @@ export default function AdminProfilePage() {
 
   if (!user) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-slate-400">Failed to load profile. Please try again.</p>
+      <div className="flex flex-col items-center justify-center h-64 space-y-4">
+        <AlertCircle className="w-8 h-8 text-red-500" />
+        <p className="text-slate-400">{errorMsg || 'Failed to load profile. Please try again.'}</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm hover:bg-white/10"
+        >
+          Retry
+        </button>
       </div>
     )
   }
@@ -204,8 +253,8 @@ export default function AdminProfilePage() {
 
           <div className="mt-4 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-bold text-white">{user.email.split('@')[0]}</h2>
-              <p className="text-slate-400 text-sm mt-0.5">{user.email}</p>
+              <h2 className="text-2xl font-bold text-white">{user.name || user.email.split('@')[0]}</h2>
+              <p className="text-slate-400 text-sm mt-0.5">{user.jobTitle || 'System Administrator'} • {user.department || 'Operations'}</p>
             </div>
 
             <div className="flex items-center gap-2">
@@ -251,6 +300,140 @@ export default function AdminProfilePage() {
         <CardHeader className="bg-white/[0.02] border-b border-white/5">
           <CardTitle className="text-lg text-white flex items-center">
             <User className="w-5 h-5 mr-3 text-blue-500" />
+            Personal Information
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6 space-y-6">
+          {/* Full Name */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-4 border-b border-white/5">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="w-9 h-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+                <User className="w-4 h-4 text-blue-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs uppercase tracking-widest text-slate-500 font-semibold">Full Name</p>
+                {editingPersonal ? (
+                  <input
+                    value={nameDraft}
+                    onChange={e => setNameDraft(e.target.value)}
+                    placeholder="Enter your full name"
+                    className="mt-1 w-full max-w-sm bg-black/50 border border-blue-500/40 px-3 py-1.5 rounded-lg text-white text-sm outline-none focus:border-blue-500 transition-colors"
+                  />
+                ) : (
+                  <p className="text-white text-sm font-medium mt-0.5">{user.name || 'Not set'}</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Job Title */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-4 border-b border-white/5">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="w-9 h-9 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-4 h-4 text-violet-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs uppercase tracking-widest text-slate-500 font-semibold">Job Title / Designation</p>
+                {editingPersonal ? (
+                  <input
+                    value={jobTitleDraft}
+                    onChange={e => setJobTitleDraft(e.target.value)}
+                    placeholder="e.g. Lead Talent Partner"
+                    className="mt-1 w-full max-w-sm bg-black/50 border border-blue-500/40 px-3 py-1.5 rounded-lg text-white text-sm outline-none focus:border-blue-500 transition-colors"
+                  />
+                ) : (
+                  <p className="text-white text-sm font-medium mt-0.5">{user.jobTitle || 'Not set'}</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Department */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-4 border-b border-white/5">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="w-9 h-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+                <Building2 className="w-4 h-4 text-blue-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs uppercase tracking-widest text-slate-500 font-semibold">Department / Team</p>
+                {editingPersonal ? (
+                  <input
+                    value={departmentDraft}
+                    onChange={e => setDepartmentDraft(e.target.value)}
+                    placeholder="e.g. Operations"
+                    className="mt-1 w-full max-w-sm bg-black/50 border border-blue-500/40 px-3 py-1.5 rounded-lg text-white text-sm outline-none focus:border-blue-500 transition-colors"
+                  />
+                ) : (
+                  <p className="text-white text-sm font-medium mt-0.5">{user.department || 'Not set'}</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Phone Number */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-4">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                <Activity className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs uppercase tracking-widest text-slate-500 font-semibold">Phone Number</p>
+                {editingPersonal ? (
+                  <input
+                    value={phoneDraft}
+                    onChange={e => setPhoneDraft(e.target.value)}
+                    placeholder="+1 (555) 000-0000"
+                    className="mt-1 w-full max-w-sm bg-black/50 border border-blue-500/40 px-3 py-1.5 rounded-lg text-white text-sm outline-none focus:border-blue-500 transition-colors"
+                  />
+                ) : (
+                  <p className="text-white text-sm font-medium mt-0.5">{user.phone || 'Not set'}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              {editingPersonal ? (
+                <>
+                  <button
+                    onClick={handleSavePersonal}
+                    disabled={saving}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    Save
+                  </button>
+                  <button
+                    onClick={() => { 
+                      setEditingPersonal(false); 
+                      setNameDraft(user.name || ''); 
+                      setPhoneDraft(user.phone || '');
+                      setJobTitleDraft(user.jobTitle || '');
+                      setDepartmentDraft(user.department || '');
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 hover:text-white text-sm transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setEditingPersonal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 hover:text-white hover:border-white/20 text-sm transition-colors"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  Edit Details
+                </button>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Account Information */}
+      <Card className="glass-card overflow-hidden">
+        <CardHeader className="bg-white/[0.02] border-b border-white/5">
+          <CardTitle className="text-lg text-white flex items-center">
+            <Mail className="w-5 h-5 mr-3 text-violet-500" />
             Account Information
           </CardTitle>
         </CardHeader>

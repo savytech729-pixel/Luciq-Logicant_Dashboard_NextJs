@@ -175,9 +175,9 @@ export default function AdminJobsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-white mb-1">Recruitment Command Center</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-white mb-1">Vacancy Management</h1>
           <p className="text-slate-400 font-medium">
-            {loading ? 'Analyzing requisitions…' : `${jobs.length} requisitions · ${activeCount} active in market`}
+            {loading ? 'Loading vacancies...' : `${jobs.length} vacancies · ${activeCount} active in market`}
           </p>
         </div>
         <button
@@ -185,7 +185,7 @@ export default function AdminJobsPage() {
           className="flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-black uppercase tracking-widest shadow-lg shadow-blue-600/20 transition-all"
         >
           <Plus className="w-4 h-4" />
-          New Job Listing
+          Post New Vacancy
         </button>
       </div>
 
@@ -280,7 +280,7 @@ export default function AdminJobsPage() {
 
                        <Link href={`/admin/matches/${job.id}`}>
                           <button className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-[0_4px_15px_rgba(37,99,235,0.2)]">
-                             <Target className="w-4 h-4" /> View Matched AI Talent
+                             <Target className="w-4 h-4" /> View Best Matches
                           </button>
                        </Link>
                     </div>
@@ -298,14 +298,14 @@ export default function AdminJobsPage() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <Briefcase className="w-5 h-5 text-blue-400" />
-              New Job Listing
+              New Vacancy Posting
             </DialogTitle>
           </DialogHeader>
 
           <form onSubmit={handleCreate} className="space-y-6 pt-2">
             <Section title="Role Information">
               <div className="col-span-2">
-                <label className="form-label">Job Title *</label>
+                <label className="form-label">Vacancy Title *</label>
                 <div className="flex gap-2">
                   <input required value={form.title} onChange={e => f('title', e.target.value)} placeholder="e.g. Senior React Developer" className="form-input flex-1" />
                   <button type="button" onClick={handleGenerate} disabled={isGenerating || !form.title} className="px-3 rounded-xl border border-blue-500/20 bg-blue-600/10 text-blue-400 hover:bg-blue-600/20 transition-all flex items-center justify-center min-w-[44px] disabled:opacity-40">
@@ -314,7 +314,7 @@ export default function AdminJobsPage() {
                 </div>
               </div>
               <div className="col-span-1">
-                <label className="form-label">Managed Client *</label>
+                <label className="form-label">Client Name *</label>
                 <select 
                    required value={form.clientId} 
                    onChange={e => {
@@ -329,7 +329,7 @@ export default function AdminJobsPage() {
               </div>
               <FormField label="Department" value={form.department} onChange={v => f('department', v)} select options={DEPARTMENTS} />
               <div className="col-span-2">
-                <label className="form-label">Job Description *</label>
+                <label className="form-label">Vacancy Description *</label>
                 <textarea required rows={3} value={form.description} onChange={e => f('description', e.target.value)} placeholder="Describe the role..." className="form-input w-full resize-none" />
               </div>
             </Section>
@@ -350,7 +350,7 @@ export default function AdminJobsPage() {
                 <label className="form-label">Work Location (Full Address)</label>
                 <input value={form.location} onChange={e => f('location', e.target.value)} placeholder="e.g. Andheri East, Mumbai" className="form-input w-full" />
               </div>
-              <FormField label="Job Category *" value={form.category} onChange={v => f('category', v)} select options={JOB_CATEGORIES} />
+              <FormField label="Category *" value={form.category} onChange={v => f('category', v)} select options={JOB_CATEGORIES} />
               <FormField label="Work Setting" value={form.workSetting} onChange={v => f('workSetting', v)} select options={WORK_SETTINGS} />
               <FormField label="Position Type" value={form.positionType} onChange={v => f('positionType', v)} select options={POSITION_TYPES} />
             </Section>
@@ -375,7 +375,7 @@ export default function AdminJobsPage() {
             </Section>
 
             <button type="submit" disabled={saving} className="w-full flex items-center justify-center gap-2 h-12 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-[10px] uppercase tracking-widest transition-all disabled:opacity-60">
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4" />Create Job Listing</>}
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4" />Post Vacancy Listing</>}
             </button>
           </form>
         </DialogContent>

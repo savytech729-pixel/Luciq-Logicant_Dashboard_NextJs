@@ -29,23 +29,10 @@ export async function POST(req: Request) {
       }
     })
 
-    // AUTO-PROVISION PROFILE IF CANDIDATE
-    if (role === 'CANDIDATE') {
-      await prisma.candidate.create({
-        data: {
-          userId: user.id,
-          name: email.split('@')[0], // Placeholder name from email
-          currentRole: 'Unindexed Talent',
-          experienceYears: 0,
-          skills: []
-        }
-      })
-    }
-
     // Create session
-    await login({ id: user.id, email: user.email, role: user.role })
+    await login({ id: user.id, email: user.email, role: user.role, isOnboarded: false })
 
-    return NextResponse.json({ message: 'User created', role: user.role })
+    return NextResponse.json({ message: 'User created', role: user.role, isOnboarded: false })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }

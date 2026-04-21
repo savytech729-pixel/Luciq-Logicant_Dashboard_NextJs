@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { generateOutreachMessage } from '@/lib/ai'
 
 export interface NotificationPayload {
   candidateName: string
@@ -34,35 +35,35 @@ export const commService = {
       email: candidate.email || 'N/A' // Need user email if not on candidate
     }
 
-    // 3. Generate templates
+    // 3. Generate templates using AI
+    const aiMessage = await generateOutreachMessage(candidate, job, channel)
+    
+    if (aiMessage) {
+      return {
+        target: channel === 'whatsapp' ? (payload.phone || 'No Phone Number') : payload.email,
+        ...aiMessage,
+        // Override actionUrls with proper schemes if needed
+        actionUrl: channel === 'whatsapp' 
+          ? `https://wa.me/${payload.phone?.replace('+', '').replace(' ', '')}?text=${encodeURIComponent(aiMessage.message)}`
+          : `mailto:${payload.email}?subject=${encodeURIComponent(aiMessage.title)}&body=${encodeURIComponent(aiMessage.message)}`
+      }
+    }
+
+    // Fallback if AI fails
     if (channel === 'whatsapp') {
       return {
         target: payload.phone || 'No Phone Number',
         title: 'WhatsApp Interview Invite',
-        message: `Hi ${payload.candidateName}! 👋 This is the Talent Team at EasyHire. 
-
-We loved your AI match score for the ${payload.jobTitle} position and would like to invite you for an interview. 
-
-Are you available this week for a quick chat? Let us know!`,
-        actionUrl: `https://wa.me/${payload.phone?.replace('+', '').replace(' ', '')}?text=${encodeURIComponent(`Hi ${payload.candidateName}! This is the Talent Team at EasyHire. We loved your profile for ${payload.jobTitle}...`)}`
+        message: `Hi ${payload.candidateName}! 👋 This is the Talent Team. We loved your match for ${payload.jobTitle}.`,
+        actionUrl: `https://wa.me/${payload.phone?.replace('+', '').replace(' ', '')}?text=${encodeURIComponent(`Hi ${payload.candidateName}!`)}`
       }
     }
 
     return {
       target: payload.email,
       title: 'Interview Invitation: ' + payload.jobTitle,
-      message: `Dear ${payload.candidateName},
-
-I hope this email finds you well.
-
-Our AI screening system has identified your profile as a high-confidence match for the ${payload.jobTitle} requisition at our firm. We were particularly impressed with your expertise and the alignment of your notice period.
-
-Would you be open to a 30-minute virtual technical screener later this week?
-
-Best regards,
-The Talent Management Team
-EasyHire (Internal Stack)`,
-      actionUrl: `mailto:${payload.email}?subject=${encodeURIComponent('Interview Invitation: ' + payload.jobTitle)}&body=${encodeURIComponent(`Dear ${payload.candidateName}, ...`)}`
+      message: `Dear ${payload.candidateName}, we loved your profile...`,
+      actionUrl: `mailto:${payload.email}`
     }
   },
 

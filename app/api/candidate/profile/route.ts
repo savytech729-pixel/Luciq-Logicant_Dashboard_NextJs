@@ -9,10 +9,35 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { name, experienceYears, currentRole, skills } = await req.json()
+    const data = await req.json()
+    const { 
+      name, experienceYears, currentRole, skills, 
+      phone, preferredLocation, noticePeriod, 
+      expectedSalary, workSettingPreference, linkedInUrl,
+      profilePic, salarySlipUrl, offerLetterUrl, terminationLetterUrl
+    } = data
 
-    if (!name || isNaN(experienceYears) || !currentRole || !Array.isArray(skills)) {
-      return NextResponse.json({ error: 'Invalid fields' }, { status: 400 })
+    if (!name || !currentRole || !Array.isArray(skills)) {
+      return NextResponse.json({ error: 'Missing core profile fields' }, { status: 400 })
+    }
+
+    const profileData = {
+      name,
+      experienceYears: Number(experienceYears),
+      totalExperience: Number(experienceYears),
+      currentRole,
+      skills,
+      phone,
+      preferredLocation,
+      noticePeriod,
+      expectedSalary,
+      workSettingPreference,
+      linkedInUrl,
+      profilePic,
+      salarySlipUrl,
+      offerLetterUrl,
+      terminationLetterUrl,
+      isReadyToJoin: true
     }
 
     let candidate = await prisma.candidate.findFirst({ where: { userId: session.id } })
@@ -20,21 +45,13 @@ export async function POST(req: Request) {
     if (candidate) {
       candidate = await prisma.candidate.update({
         where: { id: candidate.id },
-        data: {
-          name,
-          experienceYears: Number(experienceYears),
-          currentRole,
-          skills
-        }
+        data: profileData
       })
     } else {
       candidate = await prisma.candidate.create({
         data: {
           userId: session.id,
-          name,
-          experienceYears: Number(experienceYears),
-          currentRole,
-          skills
+          ...profileData
         }
       })
     }

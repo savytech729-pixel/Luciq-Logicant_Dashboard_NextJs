@@ -3,34 +3,44 @@ import { prisma } from '@/lib/prisma'
 export const candidateService = {
   async getProfileByUserId(userId: string) {
     try {
-      const result = await (prisma as any).$runCommandRaw({
-        find: 'Candidate',
-        filter: { userId: { $oid: userId } },
-        limit: 1
+      // 1. Fetch Candidate
+      const candidate = await prisma.candidate.findUnique({
+        where: { userId },
+        include: { user: true }
       })
-      const docs = (result as any)?.cursor?.firstBatch ?? []
-      if (!docs[0]) return null
       
-      const candidate = { ...docs[0], id: docs[0]._id?.$oid ?? String(docs[0]._id) }
-      
-      // Fetch associated job matches for the dashboard feed
-      const matchesResult = await (prisma as any).$runCommandRaw({
-        find: 'PipelineMatch',
-        filter: { candidateId: { $oid: candidate.id } }
+      if (!candidate) return null
+
+      // 2. Fetch associated job matches with Job details
+      const matches = await prisma.pipelineMatch.findMany({
+        where: { candidateId: candidate.id },
+        include: {
+          job: {
+            select: {
+              title: true,
+              clientName: true,
+              location: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
       })
-      const matches = (matchesResult as any)?.cursor?.firstBatch ?? []
       
       return {
         ...candidate,
         matches: matches.map((m: any) => ({
-          jobId: m.jobId?.$oid ?? String(m.jobId),
+          id: m.id,
+          jobId: m.jobId,
+          jobTitle: m.job?.title || 'Unknown Role',
+          clientName: m.job?.clientName || 'Private Client',
           status: m.status,
           score: m.score,
-          updatedAt: m.updatedAt?.$date ?? m.updatedAt
+          updatedAt: m.updatedAt
         }))
       }
-    } catch {
-      return await prisma.candidate.findFirst({ where: { userId }, include: { user: true } })
+    } catch (err) {
+      console.error('getProfileByUserId Error:', err)
+      return null
     }
   },
 

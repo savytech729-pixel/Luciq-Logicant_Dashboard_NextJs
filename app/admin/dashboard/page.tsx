@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { Users, Briefcase, Activity, Target, Zap, CheckCircle2 } from 'lucide-react'
+import { Users, Briefcase, Activity, Target, Zap, CheckCircle2, AlertCircle } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -36,10 +36,10 @@ export default function AdminDashboard() {
         <div>
           <div className="flex items-center gap-2 mb-2">
             <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse ring-4 ring-blue-500/20" />
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-500">Live Engine Telemetry</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-500">Platform Status</span>
           </div>
-          <h1 className="text-4xl font-black tracking-tight text-white mb-2">AI Command Center</h1>
-          <p className="text-slate-400 font-medium">Monitoring global talent influx and recruitment velocity across specialized domains.</p>
+          <h1 className="text-4xl font-black tracking-tight text-white mb-2">Dashboard</h1>
+          <p className="text-slate-400 font-medium">Overview of candidate flow and vacancy status.</p>
         </div>
         <div className="flex items-center gap-3 bg-white/[0.03] border border-white/5 p-1 rounded-2xl">
           <button className="px-4 py-2 rounded-xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-600/20">Operational</button>
@@ -49,27 +49,27 @@ export default function AdminDashboard() {
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <SmartKpi
-          label="Talent Indexed"
+          label="Candidates"
           value={stats.candidates}
-          subValue="+14% Activity"
+          subValue="Total in database"
           icon={<Users className="h-4 w-4 text-blue-400" />}
           trend="up"
         />
         <SmartKpi
-          label="Active Sequences"
+          label="Active Vacancies"
           value={stats.jobs}
-          subValue="Cross-border reqs"
+          subValue="Currently open"
           icon={<Briefcase className="h-4 w-4 text-violet-400" />}
         />
         <SmartKpi
-          label="Match Velocity"
-          value={stats.matchVelocity}
-          subValue="AI processing time"
-          icon={<Zap className="h-4 w-4 text-amber-400" />}
-          trend="up"
+          label="Integrity Alerts"
+          value={stats.aiFraudAlerts}
+          subValue="AI Usage Detected"
+          icon={<AlertCircle className={`h-4 w-4 ${stats.aiFraudAlerts > 0 ? 'text-red-400 animate-pulse' : 'text-slate-400'}`} />}
+          trend={stats.aiFraudAlerts > 0 ? "down" : undefined}
         />
         <SmartKpi
-          label="Placement Yield"
+          label="Total Value"
           value={`₹${stats.placementYield}`}
           subValue="Projected Revenue"
           icon={<Target className="h-4 w-4 text-emerald-400" />}
@@ -82,8 +82,8 @@ export default function AdminDashboard() {
           <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600/5 blur-[120px] rounded-full pointer-events-none group-hover:bg-blue-600/10 transition-all duration-1000" />
           <CardHeader className="bg-white/[0.02] border-b border-white/5 flex flex-row items-center justify-between py-5">
             <div>
-              <CardTitle className="text-lg text-white font-black uppercase tracking-widest">Global Pipeline Influx</CardTitle>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Real-time candidate indexing trajectory</p>
+              <CardTitle className="text-lg text-white font-black uppercase tracking-widest">Candidate Flow</CardTitle>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Real-time candidate growth chart</p>
             </div>
             <div className="flex gap-2">
                {['7D', '30D', '90D'].map(p => <button key={p} className={`px-3 py-1 rounded-lg text-[9px] font-black border transition-all ${p === '30D' ? 'bg-blue-600 border-blue-500 text-white' : 'bg-white/5 border-white/5 text-slate-500 hover:border-white/10'}`}>{p}</button>)}
@@ -117,7 +117,7 @@ export default function AdminDashboard() {
           <Card className="glass-card overflow-hidden border-blue-500/20 shadow-lg shadow-blue-500/5">
             <CardHeader className="bg-white/[0.02] border-b border-white/5 pb-4">
               <CardTitle className="text-sm font-black uppercase tracking-widest text-white flex items-center gap-2">
-                 <Zap className="w-4 h-4 text-blue-500 fill-blue-500" /> Executive AI Briefing
+                 <Zap className="w-4 h-4 text-blue-500 fill-blue-500" /> Platform Updates
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-6 space-y-5">
@@ -137,19 +137,19 @@ export default function AdminDashboard() {
                   </motion.div>
                 ))}
                 <button className="w-full py-3 rounded-xl bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white hover:bg-white/10 transition-all mt-2">
-                  View Intelligence Log
+                  View Activity Log
                 </button>
             </CardContent>
           </Card>
 
           <Card className="glass-card overflow-hidden bg-gradient-to-br from-blue-600/10 to-transparent">
             <CardHeader className="bg-white/[0.02] border-b border-white/5 pb-4">
-              <CardTitle className="text-sm font-black uppercase tracking-widest text-white">System Calibration</CardTitle>
+              <CardTitle className="text-sm font-black uppercase tracking-widest text-white">System Performance</CardTitle>
             </CardHeader>
             <CardContent className="pt-6 space-y-4">
                <div className="space-y-2">
                   <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-500">
-                     <span>Extraction Accuracy</span>
+                     <span>Data Accuracy</span>
                      <span className="text-blue-400">99.4%</span>
                   </div>
                   <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
@@ -158,7 +158,7 @@ export default function AdminDashboard() {
                </div>
                <div className="space-y-2">
                   <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-500">
-                     <span>Matching Fidelity</span>
+                     <span>Matching Quality</span>
                      <span className="text-emerald-400">98.1%</span>
                   </div>
                   <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">

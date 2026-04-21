@@ -7,8 +7,8 @@ export default function AdminSettingsPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-700 pb-12">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-white mb-2">Platform Architecture</h1>
-        <p className="text-slate-400">Configure Global Multi-Tenant parameters, SSO, and AI Routing.</p>
+        <h1 className="text-3xl font-bold tracking-tight text-white mb-2">System Settings</h1>
+        <p className="text-slate-400">Manage platform security, branding, and AI options.</p>
       </div>
 
       <div className="space-y-6">
@@ -76,7 +76,7 @@ export default function AdminSettingsPage() {
         <Card className="glass-card overflow-hidden">
           <CardHeader className="bg-white/[0.02] border-b border-white/5 pb-4">
              <CardTitle className="text-lg text-white flex items-center">
-                <Cpu className="w-5 h-5 mr-3 text-purple-500" /> Generative AI Engine
+                <Cpu className="w-5 h-5 mr-3 text-purple-500" /> AI Settings
              </CardTitle>
           </CardHeader>
           <CardContent className="p-6 space-y-6">
@@ -95,8 +95,8 @@ export default function AdminSettingsPage() {
              </div>
              
              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
-                <h4 className="text-sm font-bold text-red-400 mb-1">Warning: Sandbox Restriction</h4>
-                <p className="text-xs text-red-300">Vector embedding alterations are locked for this master demo instance. Tenant API keys are required for custom model training.</p>
+                <h4 className="text-sm font-bold text-red-400 mb-1">Notice</h4>
+                <p className="text-xs text-red-300">Advanced AI settings are currently restricted. Contact support for custom model integration.</p>
              </div>
           </CardContent>
         </Card>

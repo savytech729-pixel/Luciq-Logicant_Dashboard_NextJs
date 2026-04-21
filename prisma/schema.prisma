@@ -29,6 +29,11 @@ model User {
   email     String     @unique
   password  String
   role      UserRole
+  name      String?
+  phone     String?
+  jobTitle  String?
+  department String?
+  isOnboarded Boolean    @default(false)
   createdAt DateTime   @default(now())
 
   candidate Candidate?
@@ -53,7 +58,11 @@ model Candidate {
 
   // ── Recruitment Details ──────────────────────────────
   phone           String?  // Needed for WhatsApp Invites
+  profilePic      String?
   cvUrl           String?  // Document analyzed by AI
+  salarySlipUrl   String?
+  offerLetterUrl  String?
+  terminationLetterUrl String?
   linkedInUrl     String?
   currentSalary   String?  // e.g. "₹12L p.a."
   expectedSalary  String?  // e.g. "₹18L p.a."
@@ -61,7 +70,7 @@ model Candidate {
   preferredLocation String? // e.g. "Mumbai / Pune"
   workSettingPreference String? // "Remote" | "Hybrid" | "On-site"
   isReadyToJoin   Boolean  @default(true)
-
+  
   createdAt       DateTime @default(now())
 }
 
@@ -93,6 +102,8 @@ model Job {
   requiredSkills     String[]
   experienceRequired Int
   salaryRange        String?  // e.g. "₹12L – ₹18L p.a."
+  screeningQuestions String[] // Questions AI will ask candidates
+
 
   // ── Logistics ─────────────────────────────────────────
   location           String?  // Full address, e.g. "Andheri, Mumbai"
@@ -123,6 +134,15 @@ model PipelineMatch {
   
   status          String   @default("REVEALED") // REVEALED | SCREENING | SHORTLISTED | SELECTED | REJECTED
   score           Int?
+  
+  // ── AI Pre-screening Results ──────────────────────────
+  screeningAnswers Json?    // Response data
+  screeningScore   Int?     // AI Evaluation (0-100)
+  screeningSummary String?  // AI's executive summary of the chat
+  
+  // ── AI Fraud Detection ─────────────────────────────────
+  isAIUsageDetected Boolean @default(false)
+  aiConfidenceScore Int     @default(0) // 0-100 likelihood of being AI-generated
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

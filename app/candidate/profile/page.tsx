@@ -20,7 +20,17 @@ export default function CandidateProfile() {
     name: '',
     currentRole: '',
     experienceYears: 0,
-    skills: [] as string[]
+    skills: [] as string[],
+    phone: '',
+    preferredLocation: '',
+    noticePeriod: 'Immediate',
+    expectedSalary: '',
+    workSettingPreference: 'Remote',
+    linkedInUrl: '',
+    profilePic: '',
+    salarySlipUrl: '',
+    offerLetterUrl: '',
+    terminationLetterUrl: ''
   })
   const [skillInput, setSkillInput] = useState('')
 
@@ -33,7 +43,17 @@ export default function CandidateProfile() {
         name: candidate.name || '',
         currentRole: candidate.currentRole || '',
         experienceYears: candidate.experienceYears || 0,
-        skills: candidate.skills || []
+        skills: candidate.skills || [],
+        phone: candidate.phone || '',
+        preferredLocation: candidate.preferredLocation || '',
+        noticePeriod: candidate.noticePeriod || 'Immediate',
+        expectedSalary: candidate.expectedSalary || '',
+        workSettingPreference: candidate.workSettingPreference || 'Remote',
+        linkedInUrl: candidate.linkedInUrl || '',
+        profilePic: candidate.profilePic || '',
+        salarySlipUrl: candidate.salarySlipUrl || '',
+        offerLetterUrl: candidate.offerLetterUrl || '',
+        terminationLetterUrl: candidate.terminationLetterUrl || ''
       })
       setSkillInput(Array.isArray(candidate.skills) ? candidate.skills.join(', ') : '')
     }
@@ -45,24 +65,49 @@ export default function CandidateProfile() {
     const file = e.dataTransfer?.files[0] || e.target.files?.[0]
     if (!file) return
 
-    // Trigger Fake AI NLP Parsing
+    // Trigger Real AI NLP Parsing
     setIsParsing(true)
     setParseStep(1)
     
-    setTimeout(() => setParseStep(2), 1500) // Reading Vectors
-    setTimeout(() => setParseStep(3), 3000) // Extracting Skills
-    setTimeout(() => {
-      // Auto-fill logic based on uploaded CV
-      setFormData({
-        name: "Pardeep Dhiman (Parsed)",
-        currentRole: "Data Center Architect",
-        experienceYears: 20,
-        skills: ["Data Center Architecture", "Cisco Nexus", "VMware", "AWS", "BGP", "OSPF", "Network Design", "Cloud Infrastructure"]
-      })
-      setSkillInput("Data Center Architecture, Cisco Nexus, VMware, AWS, BGP, OSPF, Network Design, Cloud Infrastructure")
-      setParseStep(4) // Complete
-      setTimeout(() => setIsParsing(false), 1500)
-    }, 4500)
+    const analyze = async () => {
+      try {
+        setParseStep(2) // Reading Vectors
+        const res = await fetch('/api/admin/candidates/screen', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName: file.name, fileSize: file.size })
+        })
+        const data = await res.json()
+        
+        if (!res.ok) throw new Error(data.message || 'Parsing failed')
+
+        setParseStep(3) // Mapping Skill Taxonomies
+        await new Promise(r => setTimeout(r, 800))
+
+        setFormData({
+          name: data.candidate.name || '',
+          currentRole: data.candidate.currentRole || '',
+          experienceYears: Number(data.candidate.totalExperience || data.candidate.experienceYears || 0),
+          skills: data.candidate.skills || [],
+          phone: data.candidate.phone || '',
+          preferredLocation: data.candidate.preferredLocation || '',
+          noticePeriod: data.candidate.noticePeriod || 'Immediate',
+          expectedSalary: data.candidate.expectedSalary || '',
+          workSettingPreference: data.candidate.workSettingPreference || 'Remote',
+          linkedInUrl: data.candidate.linkedInUrl || ''
+        })
+        setSkillInput(Array.isArray(data.candidate.skills) ? data.candidate.skills.join(', ') : '')
+        
+        setParseStep(4) // Complete
+        setTimeout(() => setIsParsing(false), 1000)
+      } catch (err) {
+        console.error(err)
+        alert('AI Parsing failed. Please fill manually.')
+        setIsParsing(false)
+      }
+    }
+
+    analyze()
   }
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -92,72 +137,15 @@ export default function CandidateProfile() {
           </button>
         </Link>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-white mb-1">Vector Engine Map</h1>
-          <p className="text-slate-400">Upload your resume or manually configure your schema for the AI.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-white mb-1">Personal Profile</h1>
+          <p className="text-slate-400">Manage your basic identity and contact information.</p>
         </div>
       </div>
-
-      {/* AI RESUME PARSER */}
-      <Card className="glass-card relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/10 blur-[100px] rounded-full pointer-events-none" />
-        <CardHeader className="border-b border-white/5 bg-white/[0.01]">
-          <CardTitle className="text-lg text-white flex items-center">
-            <BrainCircuit className="w-5 h-5 mr-3 text-blue-500" /> Auto-Parse Document (NLP)
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-6 relative z-10">
-          <AnimatePresence mode="wait">
-            {!isParsing ? (
-              <motion.div 
-                key="dropzone"
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={handleFileUpload}
-                onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed ${isDragging ? 'border-blue-500 bg-blue-500/10' : 'border-white/10 hover:border-white/20 bg-white/[0.02]'} rounded-2xl p-12 text-center cursor-pointer transition-all flex flex-col items-center group`}
-              >
-                <input type="file" className="hidden" ref={fileInputRef} onChange={handleFileUpload} accept=".pdf,.doc,.docx,.txt" />
-                <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <UploadCloud className="w-8 h-8 text-blue-400" />
-                </div>
-                <h3 className="text-white font-bold text-lg mb-1">Drop your Resume here</h3>
-                <p className="text-slate-400 text-sm">PDF, DOCX, or TXT. Our Neural Net will extract your data instantly.</p>
-              </motion.div>
-            ) : (
-              <motion.div key="parsing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-8 px-4 flex flex-col items-center">
-                <div className="relative w-32 h-32 mb-8">
-                   <div className="absolute inset-0 rounded-full border-[3px] border-white/10" />
-                   <div className="absolute inset-0 rounded-full border-[3px] border-blue-500 border-t-transparent animate-spin" />
-                   <div className="absolute inset-0 flex items-center justify-center">
-                     {parseStep === 4 ? <CheckCircle2 className="w-10 h-10 text-blue-400" /> : <FileText className="w-10 h-10 text-white animate-pulse" />}
-                   </div>
-                </div>
-                
-                <div className="space-y-4 w-full max-w-sm">
-                  <div className="flex justify-between text-sm">
-                    <span className={`transition-colors ${parseStep >= 1 ? 'text-white' : 'text-slate-600'}`}>Uploading Document...</span>
-                    {parseStep >= 1 && <CheckCircle2 className="w-4 h-4 text-blue-500" />}
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className={`transition-colors ${parseStep >= 2 ? 'text-white' : 'text-slate-600'}`}>Vectorizing Text Content...</span>
-                    {parseStep >= 2 ? <CheckCircle2 className="w-4 h-4 text-blue-500" /> : parseStep === 1 ? <span className="text-blue-500 animate-pulse">Running</span> : null}
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className={`transition-colors ${parseStep >= 3 ? 'text-white' : 'text-slate-600'}`}>Mapping Skill Taxonomies...</span>
-                    {parseStep >= 3 ? <CheckCircle2 className="w-4 h-4 text-blue-500" /> : parseStep === 2 ? <span className="text-blue-500 animate-pulse">Running</span> : null}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </CardContent>
-      </Card>
 
       <Card className="glass-card overflow-hidden">
         <form onSubmit={onSubmit}>
           <CardHeader className="bg-white/[0.02] border-b border-white/5 pb-4">
-            <CardTitle className="text-xl text-white">Identity Matrix</CardTitle>
+            <CardTitle className="text-xl text-white">Identity Details</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6 p-8">
             <div className="grid md:grid-cols-2 gap-6">
@@ -172,50 +160,89 @@ export default function CandidateProfile() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="exp" className="text-slate-300">Experience (Years)</Label>
+                <Label htmlFor="phone" className="text-slate-300">Phone Number</Label>
                 <input 
-                  id="exp" 
-                  type="number" 
-                  min="0" 
-                  value={formData.experienceYears} 
-                  onChange={(e) => setFormData({...formData, experienceYears: parseInt(e.target.value, 10)})} 
-                  required 
+                  id="phone" 
+                  value={formData.phone} 
+                  onChange={(e) => setFormData({...formData, phone: e.target.value})} 
+                  placeholder="+91 00000 00000"
                   className="w-full bg-white/[0.02] border border-white/10 focus:border-blue-500 text-white h-12 px-4 rounded-xl outline-none transition-colors" 
                 />
               </div>
             </div>
+            
             <div className="space-y-2">
-              <Label htmlFor="role" className="text-slate-300">Target Requisition</Label>
+              <Label htmlFor="linkedin" className="text-slate-300">LinkedIn Profile URL</Label>
               <input 
-                id="role" 
-                placeholder="e.g. Senior Machine Learning Engineer" 
-                value={formData.currentRole} 
-                onChange={(e) => setFormData({...formData, currentRole: e.target.value})} 
-                required 
+                id="linkedin" 
+                value={formData.linkedInUrl} 
+                onChange={(e) => setFormData({...formData, linkedInUrl: e.target.value})} 
+                placeholder="https://linkedin.com/in/yourprofile"
                 className="w-full bg-white/[0.02] border border-white/10 focus:border-blue-500 text-white h-12 px-4 rounded-xl outline-none transition-colors" 
               />
             </div>
-            <div className="space-y-2 rounded-xl border border-white/5 bg-white/[0.01] p-6">
-              <Label htmlFor="skills" className="text-blue-500 font-semibold flex items-center">
-                Skills Array (Comma Separated)
-              </Label>
-              <input 
-                id="skills" 
-                placeholder="React, Node.js, Python, TensorFlow" 
-                value={skillInput} 
-                onChange={(e) => setSkillInput(e.target.value)} 
-                required 
-                className="w-full mt-4 bg-[#0A0A0A] border border-white/10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 text-white h-12 px-4 rounded-xl outline-none transition-colors" 
-              />
+
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="location" className="text-slate-300">Current Location / Preferred</Label>
+                <input 
+                  id="location" 
+                  value={formData.preferredLocation} 
+                  onChange={(e) => setFormData({...formData, preferredLocation: e.target.value})} 
+                  placeholder="e.g. Mumbai, Remote"
+                  className="w-full bg-white/[0.02] border border-white/10 focus:border-blue-500 text-white h-12 px-4 rounded-xl outline-none transition-colors" 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="setting" className="text-slate-300">Work Setting Preference</Label>
+                <select 
+                  id="setting" 
+                  value={formData.workSettingPreference} 
+                  onChange={(e) => setFormData({...formData, workSettingPreference: e.target.value})}
+                  className="w-full bg-[#0A0A0A] border border-white/10 focus:border-blue-500 text-white h-12 px-4 rounded-xl outline-none transition-colors"
+                >
+                  <option value="Remote">Remote</option>
+                  <option value="Hybrid">Hybrid</option>
+                  <option value="On-site">On-site</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="notice" className="text-slate-300">Notice Period</Label>
+                <select 
+                  id="notice" 
+                  value={formData.noticePeriod} 
+                  onChange={(e) => setFormData({...formData, noticePeriod: e.target.value})}
+                  className="w-full bg-[#0A0A0A] border border-white/10 focus:border-blue-500 text-white h-12 px-4 rounded-xl outline-none transition-colors"
+                >
+                  <option value="Immediate">Immediate</option>
+                  <option value="15 Days">15 Days</option>
+                  <option value="30 Days">30 Days</option>
+                  <option value="Negotiable">Negotiable</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="salary" className="text-slate-300">Expected Salary</Label>
+                <input 
+                  id="salary" 
+                  value={formData.expectedSalary} 
+                  onChange={(e) => setFormData({...formData, expectedSalary: e.target.value})} 
+                  placeholder="e.g. ₹18L p.a."
+                  className="w-full bg-white/[0.02] border border-white/10 focus:border-blue-500 text-white h-12 px-4 rounded-xl outline-none transition-colors" 
+                />
+              </div>
             </div>
           </CardContent>
           <div className="border-t border-white/5 bg-white/[0.01] p-6 flex justify-end">
              <button type="submit" disabled={isUpdating} className="btn-primary w-full sm:w-auto">
-              {isUpdating ? 'Processing...' : <><Save className="w-4 h-4 mr-2" /> Commit Profile Model</>}
+              {isUpdating ? 'Saving...' : <><Save className="w-4 h-4 mr-2" /> Save Personal Profile</>}
             </button>
           </div>
         </form>
       </Card>
     </div>
+
   )
 }

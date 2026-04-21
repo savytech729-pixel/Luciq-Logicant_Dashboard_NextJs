@@ -8,17 +8,22 @@ import { hash, compare } from 'bcryptjs'
 export async function GET() {
   try {
     const session = await getSession()
+    console.log('[API] Admin Profile Session:', session)
 
     if (!session || session.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.id },
+    const user = await prisma.user.findFirst({
+      where: { email: session.email },
       select: {
         id: true,
         email: true,
         role: true,
+        name: true,
+        phone: true,
+        jobTitle: true,
+        department: true,
         createdAt: true,
         // Exclude password from response
       },
@@ -30,6 +35,7 @@ export async function GET() {
 
     return NextResponse.json({ user })
   } catch (err: any) {
+    console.error('[API] Admin Profile Error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }
@@ -45,7 +51,7 @@ export async function PATCH(req: Request) {
     }
 
     const body = await req.json()
-    const { email, currentPassword, newPassword } = body
+    const { email, name, phone, jobTitle, department, currentPassword, newPassword } = body
 
     // Fetch the current user to verify password if changing it
     const user = await prisma.user.findUnique({ where: { id: session.id } })
@@ -63,6 +69,11 @@ export async function PATCH(req: Request) {
       }
       updateData.email = email
     }
+    
+    if (name !== undefined) updateData.name = name
+    if (phone !== undefined) updateData.phone = phone
+    if (jobTitle !== undefined) updateData.jobTitle = jobTitle
+    if (department !== undefined) updateData.department = department
 
     // Handle password change
     if (newPassword) {
@@ -83,7 +94,7 @@ export async function PATCH(req: Request) {
     const updated = await prisma.user.update({
       where: { id: session.id },
       data: updateData,
-      select: { id: true, email: true, role: true, createdAt: true },
+      select: { id: true, email: true, role: true, name: true, phone: true, jobTitle: true, department: true, createdAt: true },
     })
 
     return NextResponse.json({ user: updated, message: 'Profile updated successfully' })

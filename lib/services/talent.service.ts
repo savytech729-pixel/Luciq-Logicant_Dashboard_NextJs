@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { analyzeMatch } from '@/lib/ai'
 
 export const talentService = {
   async getAllCandidates() {
@@ -190,15 +191,18 @@ export const talentService = {
         user: { email: user?.email || 'Unknown' }
       }
 
-      // Proactive Intelligence
+      // Proactive Intelligence via AI
       const skillsArr = Array.isArray(candidate.skills) ? candidate.skills : (typeof candidate.skills === 'string' ? candidate.skills.split(',').map((s: string) => s.trim()) : []);
-      const skillHighlight = skillsArr.length > 0 ? skillsArr.slice(0, 3).join(', ') : 'generalist competencies';
+      const analysis = await analyzeMatch(candidateData, { title: candidateData.currentRole, requiredSkills: skillsArr })
       
-      const aiSummary = [
-        `Verified Experience: Candidate demonstrates ${candidate.totalExperience || candidate.experienceYears || '0'} years of professional trajectory, primarily focused on ${candidate.currentRole || 'technical'} mandates.`,
-        `Technical Footprint: Identified dominant competencies in ${skillHighlight}. Architecture is optimized for ${skillsArr.includes('React') || skillsArr.includes('Node.js') ? 'full-stack scaling' : 'core infrastructure development'}.`,
-        `Logistics & Availability: Profile exhibits ${candidate.noticePeriod || 'negotiable'} mobility. Preference for ${candidate.workSettingPreference || 'flexible'} environments aligns with modern distributed specialized teams.`,
-        `Strategic Alignment: Current compensation expectations are set at ${candidate.expectedSalary || 'competitive market rates'}. Sentiment analysis indicates ${candidate.isReadyToJoin ? 'high-velocity' : 'measured'} readiness for immediate role transition.`
+      const aiSummary = analysis ? [
+        `AI Verified trajectory: ${analysis.reasoning}`,
+        `Strengths: ${analysis.strengths.join(', ')}`,
+        `Gaps to address: ${analysis.gaps.join(', ')}`,
+        `Technical depth: High confidence in ${skillsArr.slice(0, 3).join(', ')}.`
+      ] : [
+        `Experience: ${candidate.totalExperience || 'N/A'} Years.`,
+        `Primary Role: ${candidate.currentRole}.`
       ]
 
       return { candidate: candidateData, aiSummary }

@@ -1,6 +1,17 @@
 import { Sidebar } from '@/components/dashboard/Sidebar'
+import { getSession } from '@/lib/auth'
+import { redirect } from 'next/navigation'
 
-export default function CandidateLayout({ children }: { children: React.ReactNode }) {
+export default async function CandidateLayout({ children }: { children: React.ReactNode }) {
+  const session = await getSession()
+  
+  if (!session || session.role !== 'CANDIDATE') {
+    redirect('/login')
+  }
+
+  if (!session.isOnboarded) {
+    redirect('/onboarding')
+  }
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-gray-950">
       <Sidebar role="CANDIDATE" />

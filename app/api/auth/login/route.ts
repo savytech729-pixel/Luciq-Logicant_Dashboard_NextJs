@@ -26,9 +26,18 @@ export async function POST(req: Request) {
     }
 
     // Create session
-    await login({ id: existingUser.id, email: existingUser.email, role: existingUser.role })
+    await login({ 
+      id: existingUser.id, 
+      email: existingUser.email, 
+      role: existingUser.role,
+      isOnboarded: existingUser.isOnboarded 
+    })
 
-    return NextResponse.json({ message: 'Logged in', role: existingUser.role })
+    return NextResponse.json({ 
+      message: 'Logged in', 
+      role: existingUser.role,
+      isOnboarded: existingUser.isOnboarded
+    })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
