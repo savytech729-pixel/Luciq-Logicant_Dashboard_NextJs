@@ -99,11 +99,18 @@ export default function AdminCandidatesPage() {
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
         try {
-          // Read file content
+          // Read file content as Base64 for real AI parsing
           const reader = new FileReader()
-          const fileContent = await new Promise<string>((resolve) => {
-            reader.onload = (e) => resolve(e.target?.result as string || "")
-            reader.readAsText(file)
+          const fileData = await new Promise<{base64: string, mimeType: string}>((resolve) => {
+            reader.onload = (e) => {
+              const res = e.target?.result as string || ""
+              const [header, base64] = res.split(';base64,')
+              resolve({ 
+                base64, 
+                mimeType: header.split(':')[1] || "application/pdf" 
+              })
+            }
+            reader.readAsDataURL(file)
           })
 
           // 1. Screen/Parse
@@ -113,7 +120,7 @@ export default function AdminCandidatesPage() {
             body: JSON.stringify({ 
               fileName: file.name, 
               fileSize: file.size,
-              content: fileContent.slice(0, 8000) // First 8k for bulk
+              fileData
             })
           })
           const screenData = await screenRes.json()
@@ -147,11 +154,18 @@ export default function AdminCandidatesPage() {
       try {
         setParseStep(1) // Semantic Vectorization
         
-        // Read file content for real AI parsing
+        // Read file content as Base64 for real AI parsing
         const reader = new FileReader()
-        const fileContent = await new Promise<string>((resolve) => {
-          reader.onload = (e) => resolve(e.target?.result as string || "")
-          reader.readAsText(file)
+        const fileData = await new Promise<{base64: string, mimeType: string}>((resolve) => {
+          reader.onload = (e) => {
+            const res = e.target?.result as string || ""
+            const [header, base64] = res.split(';base64,')
+            resolve({ 
+              base64, 
+              mimeType: header.split(':')[1] || "application/pdf" 
+            })
+          }
+          reader.readAsDataURL(file)
         })
 
         setParseStep(2) // Classification
@@ -162,7 +176,7 @@ export default function AdminCandidatesPage() {
           body: JSON.stringify({ 
             fileName: file.name, 
             fileSize: file.size,
-            content: fileContent.slice(0, 10000) // Send first 10k chars for parsing
+            fileData
           })
         })
         const data = await res.json()

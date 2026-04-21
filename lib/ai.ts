@@ -11,13 +11,13 @@ export const AI_MODELS = {
  * Intelligent Resume Parser
  * Uses Gemini 1.5 Flash for high-speed document extraction
  */
-export async function parseResume(fileName: string, content?: string) {
+export async function parseResume(fileName: string, content?: string, fileData?: { base64: string, mimeType: string }) {
   const model = genAI.getGenerativeModel({ model: AI_MODELS.FLASH });
 
   const prompt = `
     You are an expert recruitment AI. Analyze the following resume (filename: ${fileName}) and extract structured information.
     
-    If you only have the filename, try to infer as much as possible, but if there is actual text content provided, prioritize that.
+    If you are provided with a document (PDF/Image), analyze it directly. If only text is provided, use that.
     
     Return ONLY a JSON object with the following structure:
     {
@@ -36,7 +36,20 @@ export async function parseResume(fileName: string, content?: string) {
   `;
 
   try {
-    const result = await model.generateContent([prompt, content || ""]);
+    const parts: any[] = [prompt];
+    
+    if (fileData) {
+      parts.push({
+        inlineData: {
+          data: fileData.base64,
+          mimeType: fileData.mimeType
+        }
+      });
+    } else {
+      parts.push(content || "");
+    }
+
+    const result = await model.generateContent(parts);
     const response = await result.response;
     const text = response.text();
     
