@@ -57,7 +57,6 @@ const EMPTY_FORM = {
   noticePeriod: 'Immediate',
   category: 'IT',
   buyoutAllowed: false,
-  clientId: '',
 }
 
 type AlertState = { type: 'success' | 'error'; message: string } | null
@@ -77,7 +76,6 @@ export default function AdminJobsPage() {
   const [saving, setSaving] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [clients, setClients] = useState<any[]>([])
 
   const flashAlert = (a: AlertState) => {
     setAlert(a)
@@ -97,20 +95,9 @@ export default function AdminJobsPage() {
     }
   }, [])
 
-  const fetchClients = useCallback(async () => {
-    try {
-      const res = await fetch('/api/admin/clients')
-      const data = await res.json()
-      setClients(data.clients || [])
-    } catch (err) {
-      console.error('Failed to load clients', err)
-    }
-  }, [])
-
   useEffect(() => { 
     fetchJobs()
-    fetchClients()
-  }, [fetchJobs, fetchClients])
+  }, [fetchJobs])
 
   const f = (k: keyof typeof form, v: string | boolean) =>
     setForm(prev => ({ ...prev, [k]: v }))
@@ -314,18 +301,13 @@ export default function AdminJobsPage() {
                 </div>
               </div>
               <div className="col-span-1">
-                <label className="form-label">Client Name *</label>
-                <select 
-                   required value={form.clientId} 
-                   onChange={e => {
-                     const selectedClient = clients.find(c => c.id === e.target.value)
-                     setForm(prev => ({ ...prev, clientId: e.target.value, clientName: selectedClient?.name || '' }))
-                   }} 
+                <label className="form-label">Client Name (Optional)</label>
+                <input 
+                   value={form.clientName} 
+                   onChange={e => f('clientName', e.target.value)} 
+                   placeholder="e.g. Acme Corp"
                    className="form-input"
-                >
-                   <option value="">Select Enterprise Client...</option>
-                   {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                />
               </div>
               <FormField label="Department" value={form.department} onChange={v => f('department', v)} select options={DEPARTMENTS} />
               <div className="col-span-2">

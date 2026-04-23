@@ -12,55 +12,25 @@ export const AI_MODELS = {
  * Uses Gemini 1.5 Flash for high-speed document extraction
  */
 export async function parseResume(fileName: string, content?: string, fileData?: { base64: string, mimeType: string }) {
-  const model = genAI.getGenerativeModel({ model: AI_MODELS.FLASH });
-
-  const prompt = `
-    You are an expert recruitment AI. Analyze the following resume (filename: ${fileName}) and extract structured information.
-    
-    If you are provided with a document (PDF/Image), analyze it directly. If only text is provided, use that.
-    
-    Return ONLY a JSON object with the following structure:
-    {
-      "name": "Full Name",
-      "email": "Email Address",
-      "phone": "Phone Number",
-      "currentRole": "Job Title",
-      "totalExperience": "Years as a number or string",
-      "skills": ["Skill 1", "Skill 2"],
-      "education": "Highest degree",
-      "summary": "Short 1-2 sentence professional bio",
-      "preferredLocation": "City or Remote",
-      "noticePeriod": "Immediate/1 Month/etc",
-      "expectedSalary": "Estimated salary based on role if not found"
-    }
-  `;
-
-  try {
-    const parts: any[] = [prompt];
-    
-    if (fileData) {
-      parts.push({
-        inlineData: {
-          data: fileData.base64,
-          mimeType: fileData.mimeType
-        }
-      });
-    } else {
-      parts.push(content || "");
-    }
-
-    const result = await model.generateContent(parts);
-    const response = await result.response;
-    const text = response.text();
-    
-    // Clean JSON from potential markdown blocks
-    const jsonStr = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    return JSON.parse(jsonStr);
-  } catch (err) {
-    console.error("AI Parsing Error:", err);
-    return null;
-  }
+  // MOCK DATA FOR TEST PURPOSES (BYPASSING ACTUAL PARSING)
+  console.log(`[TEST MODE] Bypassing AI parsing for: ${fileName}`);
+  
+  // Return a generic mock candidate structure
+  return {
+    name: fileName.split('.')[0].replace(/_/g, ' ').replace(/-/g, ' '),
+    email: `candidate_${Math.floor(Math.random() * 1000)}@example.com`,
+    phone: "+91 9876543210",
+    currentRole: "Software Engineer",
+    totalExperience: "5",
+    skills: ["React", "TypeScript", "Node.js", "Next.js"],
+    education: "Bachelor of Technology",
+    summary: "Experienced software developer with a focus on building scalable web applications.",
+    preferredLocation: "Remote",
+    noticePeriod: "Immediate",
+    expectedSalary: "₹18,00,000"
+  };
 }
+
 
 /**
  * Advanced Match Analysis
