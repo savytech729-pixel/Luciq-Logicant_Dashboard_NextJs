@@ -16,6 +16,9 @@ function RegisterForm() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [role, setRole] = useState(roleParam)
+  const [otp, setOtp] = useState('')
+  const [otpRequired, setOtpRequired] = useState(false)
+  const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
@@ -27,12 +30,16 @@ function RegisterForm() {
       setError('Please enter a valid email address.')
       return false
     }
-    if (password.length < 8) {
+    if (!otpRequired && password.length < 8) {
       setError('Password must be at least 8 characters long.')
       return false
     }
-    if (password !== confirmPassword) {
+    if (!otpRequired && password !== confirmPassword) {
       setError('Passwords do not match.')
+      return false
+    }
+    if (otpRequired && otp.length !== 6) {
+      setError('Please enter a valid 6-digit OTP.')
       return false
     }
     return true
@@ -44,12 +51,13 @@ function RegisterForm() {
     
     setIsLoading(true)
     setError('')
+    setNotice('')
 
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, role }),
+        body: JSON.stringify(otpRequired ? { email, otp } : { email, password, role }),
       })
 
       const data = await res.json()
@@ -58,11 +66,16 @@ function RegisterForm() {
         throw new Error(data.error || 'Registration failed')
       }
 
-      setIsSuccess(true)
-      setTimeout(() => {
-        router.push('/onboarding')
-        router.refresh()
-      }, 2000)
+      if (data.otpRequired) {
+        setOtpRequired(true)
+        setNotice('OTP sent to your email. Enter it below to complete registration.')
+      } else {
+        setIsSuccess(true)
+        setTimeout(() => {
+          router.push('/onboarding')
+          router.refresh()
+        }, 2000)
+      }
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -118,6 +131,15 @@ function RegisterForm() {
                     <span>{error}</span>
                   </motion.div>
                 )}
+                {notice && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="text-sm text-blue-200 bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl"
+                  >
+                    {notice}
+                  </motion.div>
+                )}
 
                 <div className="space-y-2">
                   <Label className="text-slate-400 text-xs font-bold uppercase tracking-wider">Email Address</Label>
@@ -161,6 +183,39 @@ function RegisterForm() {
                   </div>
                 </div>
 
+                {otpRequired && (
+                  <div className="space-y-2">
+                    <Label className="text-slate-400 text-xs font-bold uppercase tracking-wider">Email Verification OTP</Label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder="Enter 6-digit OTP"
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                      className="w-full bg-white/[0.02] border border-white/10 focus:border-blue-500 text-white h-12 px-4 rounded-xl transition-all outline-none tracking-[0.35em] text-center"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setError('')
+                        setNotice('')
+                        const res = await fetch('/api/auth/register', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ email, password, role }),
+                        })
+                        const data = await res.json()
+                        if (!res.ok) setError(data.error || 'Failed to resend OTP')
+                        else setNotice('A new OTP has been sent to your email.')
+                      }}
+                      className="text-xs text-blue-400 hover:text-blue-300"
+                    >
+                      Resend OTP
+                    </button>
+                  </div>
+                )}
+
                 <div className="py-2">
                    <div className="flex items-center gap-3 p-4 bg-white/[0.02] border border-white/5 rounded-xl">
                       {role === 'ADMIN' ? <ShieldCheck className="w-5 h-5 text-purple-400" /> : <User className="w-5 h-5 text-blue-400" />}
@@ -179,9 +234,9 @@ function RegisterForm() {
                 </div>
 
                 <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold h-14 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 group" disabled={isLoading}>
-                  {isLoading ? 'Creating Account...' : (
+                  {isLoading ? (otpRequired ? 'Verifying OTP...' : 'Sending OTP...') : (
                     <>
-                      Register Now <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                      {otpRequired ? 'Verify & Create Account' : 'Send Verification OTP'} <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                     </>
                   )}
                 </button>

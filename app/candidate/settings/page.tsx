@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Bell, Lock, Shield, Trash2, Globe, Eye, UserCircle } from 'lucide-react'
 import { useCandidate } from '@/lib/hooks/useCandidate'
+import { PageHero } from '@/components/dashboard/Premium'
 
 export default function CandidateSettings() {
   const { candidate, loading, updateProfile, isUpdating } = useCandidate()
@@ -37,10 +38,11 @@ export default function CandidateSettings() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-700">
-      <div>
-        <h1 className="text-4xl font-black tracking-tight text-white mb-2">Account Settings</h1>
-        <p className="text-slate-400 font-medium">Manage your security, notifications, and personal profile.</p>
-      </div>
+      <PageHero
+        eyebrow="Personal Controls"
+        title="Account Settings"
+        description="Manage your security, notifications, and personal profile."
+      />
 
       <div className="grid gap-6">
         {/* My Profile Section */}

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, Users, Briefcase, LogOut, UserCircle, MonitorPlay, Building2, UserCog, Settings, ShieldCheck, Receipt, Target, BrainCircuit } from 'lucide-react'
+import { LayoutDashboard, Users, Briefcase, LogOut, MonitorPlay, Building2, UserCog, Settings, ShieldCheck, Receipt, Target, BrainCircuit } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 interface SidebarProps {
@@ -21,7 +21,6 @@ export function Sidebar({ role }: SidebarProps) {
         { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
         { name: 'Vacancies', href: '/admin/jobs', icon: Briefcase },
         { name: 'Candidates', href: '/admin/candidates', icon: Users },
-        { name: 'My Profile', href: '/admin/profile', icon: UserCircle },
       ]
     },
     {
@@ -32,9 +31,7 @@ export function Sidebar({ role }: SidebarProps) {
     },
     {
       group: 'System',
-      links: [
-        { name: 'Global Settings', href: '/admin/settings', icon: Settings },
-      ]
+      links: [{ name: 'Settings & Profile', href: '/admin/settings', icon: Settings }]
     }
   ]
 
@@ -74,7 +71,11 @@ export function Sidebar({ role }: SidebarProps) {
           <div key={sidx} className="space-y-1">
             <h4 className="text-[10px] uppercase font-bold tracking-widest text-slate-500 px-4 mb-2">{section.group}</h4>
             {section.links.map((link) => {
-              const isActive = pathname === link.href || (link.href !== '/candidate/dashboard#tracker' && pathname.startsWith(`${link.href}/`))
+              const exactOnly = link.href === '/admin/settings'
+              const isActive = exactOnly
+                ? pathname === link.href
+                : pathname === link.href ||
+                  (link.href !== '/candidate/dashboard#tracker' && pathname.startsWith(`${link.href}/`))
               return (
                 <Link
                   key={link.name}
@@ -101,7 +102,7 @@ export function Sidebar({ role }: SidebarProps) {
           className="flex w-full items-center px-4 py-3 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-white/5 transition-colors group"
         >
           <LogOut className="mr-3 h-5 w-5 text-slate-500 group-hover:text-red-400 transition-colors" />
-          Disconnect
+          Logout
         </button>
       </div>
     </aside>

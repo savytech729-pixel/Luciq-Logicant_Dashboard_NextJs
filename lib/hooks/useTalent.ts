@@ -12,12 +12,7 @@ export function useTalent() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to fetch candidates')
       
-      const enriched = (data.candidates || []).map((c: any) => ({
-        ...c,
-        globalScore: Math.floor(Math.random() * 30) + 70
-      })).sort((a: any, b: any) => b.globalScore - a.globalScore)
-      
-      setCandidates(enriched)
+      setCandidates(data.candidates || [])
     } catch (err: any) {
       setError(err.message)
     }

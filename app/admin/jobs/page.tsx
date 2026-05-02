@@ -8,9 +8,10 @@ import {
   Plus, BrainCircuit, MapPin, Briefcase, Clock, Users,
   Building2, Wifi, WifiOff, Monitor, MonitorPlay, Banknote,
   CheckCircle2, AlertCircle, Loader2, ChevronDown, ChevronUp,
-  Calendar, PhoneCall, ShoppingBag, Layers, Tag, X, Target
+  Calendar, PhoneCall, ShoppingBag, Layers, Tag, X, Target, Trash2,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { PageHero, SurfaceCard } from '@/components/dashboard/Premium'
 
 interface Job {
   id: string
@@ -57,6 +58,7 @@ const EMPTY_FORM = {
   noticePeriod: 'Immediate',
   category: 'IT',
   buyoutAllowed: false,
+  matchFromDatabase: true,
 }
 
 type AlertState = { type: 'success' | 'error'; message: string } | null
@@ -75,7 +77,7 @@ export default function AdminJobsPage() {
   const [form, setForm] = useState({ ...EMPTY_FORM })
   const [saving, setSaving] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const flashAlert = (a: AlertState) => {
     setAlert(a)
@@ -122,6 +124,23 @@ export default function AdminJobsPage() {
     }
   }
 
+  const handleDeleteVacancy = async (job: Job) => {
+    const msg = `Delete vacancy “${job.title}”? This cannot be undone. Pipeline matches for this role will be removed.`
+    if (typeof window !== 'undefined' && !window.confirm(msg)) return
+    setDeletingId(job.id)
+    try {
+      const res = await fetch(`/api/admin/jobs/${job.id}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(typeof data.error === 'string' ? data.error : 'Delete failed')
+      setJobs((prev) => prev.filter((j) => j.id !== job.id))
+      flashAlert({ type: 'success', message: 'Vacancy deleted.' })
+    } catch (err: unknown) {
+      flashAlert({ type: 'error', message: err instanceof Error ? err.message : 'Could not delete vacancy.' })
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.title || !form.description || !form.requiredSkills || !form.experienceRequired) {
@@ -143,10 +162,15 @@ export default function AdminJobsPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
+      const createdJobId = data.jobId as string | undefined
+      const shouldAutoMatch = Boolean(form.matchFromDatabase)
       setIsOpen(false)
       setForm({ ...EMPTY_FORM })
       fetchJobs()
       flashAlert({ type: 'success', message: 'Job listing created successfully.' })
+      if (createdJobId && shouldAutoMatch) {
+        window.location.href = `/admin/matches/${createdJobId}`
+      }
     } catch (err: any) {
       flashAlert({ type: 'error', message: err.message })
     } finally {
@@ -160,30 +184,50 @@ export default function AdminJobsPage() {
     <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-700 pb-12">
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-white mb-1">Vacancy Management</h1>
-          <p className="text-slate-400 font-medium">
-            {loading ? 'Loading vacancies...' : `${jobs.length} vacancies · ${activeCount} active in market`}
-          </p>
-        </div>
-        <button
-          onClick={() => setIsOpen(true)}
-          className="flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-black uppercase tracking-widest shadow-lg shadow-blue-600/20 transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          Post New Vacancy
-        </button>
-      </div>
+      <PageHero
+        eyebrow="Hiring Control"
+        title="Vacancy Management"
+        description={loading ? 'Loading vacancies...' : `${jobs.length} vacancies · ${activeCount} active in market`}
+        right={(
+          <button
+            onClick={() => setIsOpen(true)}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            Post New Vacancy
+          </button>
+        )}
+      />
 
       <AnimatePresence>
         {alert && (
-          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className={`flex items-center gap-3 px-5 py-4 rounded-xl border text-sm font-medium ${alert.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-red-500/10 border-red-500/30 text-red-300'}`}>
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+            <SurfaceCard className={`flex items-center gap-3 px-5 py-4 text-sm font-medium ${alert.type === 'success' ? 'border-emerald-500/30 text-emerald-300' : 'border-red-500/30 text-red-300'}`}>
             {alert.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
             {alert.message}
+            </SurfaceCard>
           </motion.div>
         )}
       </AnimatePresence>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <SurfaceCard className="p-4">
+          <p className="text-[11px] uppercase tracking-widest text-slate-500">Total Vacancies</p>
+          <p className="text-2xl font-bold text-white mt-1">{jobs.length}</p>
+        </SurfaceCard>
+        <SurfaceCard className="p-4">
+          <p className="text-[11px] uppercase tracking-widest text-slate-500">Active</p>
+          <p className="text-2xl font-bold text-emerald-300 mt-1">{jobs.filter((j) => j.status === 'Active').length}</p>
+        </SurfaceCard>
+        <SurfaceCard className="p-4">
+          <p className="text-[11px] uppercase tracking-widest text-slate-500">On Hold</p>
+          <p className="text-2xl font-bold text-amber-300 mt-1">{jobs.filter((j) => j.status === 'On Hold').length}</p>
+        </SurfaceCard>
+        <SurfaceCard className="p-4">
+          <p className="text-[11px] uppercase tracking-widest text-slate-500">Closed</p>
+          <p className="text-2xl font-bold text-slate-200 mt-1">{jobs.filter((j) => j.status === 'Closed').length}</p>
+        </SurfaceCard>
+      </div>
 
       {/* Job Matrix */}
       {loading ? (
@@ -191,86 +235,87 @@ export default function AdminJobsPage() {
           <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
         </div>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="space-y-4">
+          <div className="hidden lg:grid grid-cols-12 gap-3 px-4 py-2 text-[11px] text-slate-500 uppercase tracking-wider border border-white/10 rounded-xl bg-white/[0.02]">
+            <div className="col-span-3">Vacancy</div>
+            <div className="col-span-2">Client / Dept</div>
+            <div className="col-span-2">Logistics</div>
+            <div className="col-span-2">Skills</div>
+            <div className="col-span-1 text-center">Open</div>
+            <div className="col-span-2 text-right">Actions</div>
+          </div>
           {jobs.map(job => {
             const skills = Array.isArray(job.requiredSkills) ? job.requiredSkills : []
-            const isExpanded = expandedId === job.id
 
             return (
-              <motion.div key={job.id} layout>
-                <Card className="glass-card border-white/5 hover:border-blue-500/20 transition-all group overflow-hidden relative p-0">
-                  {/* Glow */}
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/5 blur-[80px] rounded-full pointer-events-none transition-all group-hover:bg-blue-600/10" />
-
-                  <div className="p-6 space-y-6">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3 mb-1.5 flex-wrap">
-                          <h3 className="text-xl font-bold text-white group-hover:text-blue-400 transition-colors truncate">
-                            {job.title}
-                          </h3>
-                          <span className={`text-[9px] font-black uppercase tracking-[0.2em] px-2 py-0.5 rounded-md border ${statusColor(job.status)}`}>
-                            {job.status}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 font-bold uppercase tracking-wider">
-                           {job.clientName && <span className="flex items-center gap-1.5"><Building2 className="w-3.5 h-3.5 text-blue-500" />{job.clientName}</span>}
-                           <span className="flex items-center gap-1.5"><Layers className="w-3.5 h-3.5 text-violet-500" />{job.department || 'General'}</span>
-                           <span className={`px-2 py-0.5 rounded border text-[8px] font-black tracking-widest ${job.category === 'IT' ? 'text-blue-400 border-blue-500/30' : 'text-amber-400 border-amber-500/30'}`}>
-                              {job.category || 'IT'}
-                           </span>
-                        </div>
+              <motion.div key={job.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+                <Card className="glass-card border-white/10 hover:border-blue-500/30 transition-all p-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:items-center">
+                    <div className="lg:col-span-3 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <h3 className="text-lg font-bold text-white truncate">{job.title}</h3>
+                        <span className={`text-[9px] font-black uppercase tracking-[0.2em] px-2 py-0.5 rounded-md border ${statusColor(job.status)}`}>
+                          {job.status}
+                        </span>
                       </div>
-                      <div className="shrink-0 text-right">
-                         <div className="text-[10px] uppercase font-black text-slate-500 tracking-widest mb-1">Open Positions</div>
-                         <div className="text-2xl font-black text-white">{job.openPositions}</div>
-                      </div>
+                      <p className="text-xs text-slate-500">
+                        Created {new Date(job.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}
+                      </p>
                     </div>
 
-                    {/* EASYHIRE RECRUITMENT INTELLIGENCE (Surfaced Data) */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
-                        <IntelligenceItem icon={<MapPin className="w-3.5 h-3.5 text-red-400" />} label="Location" value={job.location || 'Remote'} />
-                        <IntelligenceItem icon={<Wifi className="w-3.5 h-3.5 text-emerald-400" />} label="Setting" value={job.workSetting || 'Remote'} />
-                        <IntelligenceItem icon={<Briefcase className="w-3.5 h-3.5 text-blue-400" />} label="Type" value={job.positionType || 'Permanent'} />
-                        <IntelligenceItem icon={<Clock className="w-3.5 h-3.5 text-amber-400" />} label="Notice" value={job.noticePeriod || 'Immediate'} />
+                    <div className="lg:col-span-2">
+                      <p className="text-sm text-slate-200 font-semibold truncate">{job.clientName || 'Internal Hiring'}</p>
+                      <p className="text-xs text-slate-500 truncate">{job.department || 'General'} · {job.category || 'IT'}</p>
                     </div>
 
-                    <div className="flex justify-between items-start gap-4">
-                       <div className="flex-1">
-                          <p className="text-sm text-slate-400 font-medium leading-relaxed line-clamp-2">{job.description}</p>
-                       </div>
-                       <div className="shrink-0 text-right">
-                          <p className="text-[10px] uppercase font-black text-slate-600 tracking-widest mb-1">Buyout Option</p>
-                          <div className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border tracking-widest ${job.buyoutAllowed ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/10' : 'text-slate-600 border-white/5 bg-white/5'}`}>
-                             {job.buyoutAllowed ? 'YES' : 'NO'}
-                          </div>
-                       </div>
+                    <div className="lg:col-span-2">
+                      <p className="text-xs text-slate-400 truncate">{job.location || 'Remote'}</p>
+                      <p className="text-xs text-slate-500 truncate">{job.workSetting || 'Remote'} · {job.noticePeriod || 'Immediate'}</p>
                     </div>
 
-                    <div className="flex flex-wrap gap-1.5">
-                      {skills.slice(0, 5).map(s => (
-                        <span key={s} className="px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/10 text-slate-300 text-[10px] font-bold uppercase tracking-wider">
+                    <div className="lg:col-span-2 flex flex-wrap gap-1.5">
+                      {skills.slice(0, 3).map((s) => (
+                        <span key={s} className="px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/10 text-[10px] text-slate-300 uppercase tracking-wide">
                           {s}
                         </span>
                       ))}
-                      {skills.length > 5 && <span className="px-2.5 py-1 rounded-lg text-slate-500 text-[10px] font-bold">+{skills.length - 5}</span>}
+                      {skills.length > 3 && <span className="text-[10px] text-slate-500">+{skills.length - 3}</span>}
                     </div>
 
-                    <div className="pt-2 flex flex-col gap-4">
-                       <div className="flex items-center justify-between text-[10px] text-slate-500 font-black uppercase tracking-widest border-t border-white/5 pt-4">
-                          <div className="flex items-center gap-4">
-                             <span className="flex items-center gap-1.5"><MonitorPlay className="w-3 h-3" /> {job.interviewMode || 'Virtual'}</span>
-                             <span className="flex items-center gap-1.5"><Banknote className="w-3 h-3" /> {job.salaryRange || 'Competitive'}</span>
-                          </div>
-                          <span className="flex items-center gap-1.5"><Calendar className="w-3 h-3" /> {new Date(job.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
-                       </div>
-
-                       <Link href={`/admin/matches/${job.id}`}>
-                          <button className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-[0_4px_15px_rgba(37,99,235,0.2)]">
-                             <Target className="w-4 h-4" /> View Best Matches
-                          </button>
-                       </Link>
+                    <div className="lg:col-span-1 text-left lg:text-center">
+                      <p className="text-2xl font-black text-white leading-none">{job.openPositions}</p>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Open</p>
                     </div>
+
+                    <div className="lg:col-span-2 flex flex-col sm:flex-row gap-2 lg:justify-end items-stretch sm:items-center">
+                      <Link href={`/admin/matches/${job.id}`} className="w-full lg:w-auto">
+                        <button
+                          type="button"
+                          className="w-full lg:w-auto min-w-[170px] h-10 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-all"
+                        >
+                          <Target className="w-4 h-4" /> Open Matches
+                        </button>
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteVacancy(job)}
+                        disabled={deletingId === job.id}
+                        className="w-full lg:w-auto min-h-10 px-4 rounded-xl border border-red-500/35 bg-red-500/10 text-red-200 text-xs font-semibold flex items-center justify-center gap-2 hover:bg-red-500/20 transition-all disabled:opacity-50"
+                      >
+                        {deletingId === job.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                        Delete vacancy
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-white/10 flex flex-wrap gap-4 text-[11px] text-slate-500">
+                    <span className="flex items-center gap-1.5"><MonitorPlay className="w-3 h-3" /> {job.interviewMode || 'Virtual'}</span>
+                    <span className="flex items-center gap-1.5"><Banknote className="w-3 h-3" /> {job.salaryRange || 'Competitive'}</span>
+                    <span className="flex items-center gap-1.5"><Briefcase className="w-3 h-3" /> {job.positionType || 'Permanent'}</span>
+                    <span className="flex items-center gap-1.5">{job.buyoutAllowed ? 'Buyout Allowed' : 'No Buyout'}</span>
                   </div>
                 </Card>
               </motion.div>
@@ -351,6 +396,17 @@ export default function AdminJobsPage() {
                   </div>
                   <span className={`text-xs font-bold uppercase tracking-widest ${form.buyoutAllowed ? 'text-emerald-300' : 'text-slate-500'}`}>
                     {form.buyoutAllowed ? 'YES — Open to buyout' : 'NO buyout'}
+                  </span>
+                </div>
+              </div>
+              <div className="col-span-2 flex flex-col gap-1.5">
+                <label className="form-label">AI Match Source</label>
+                <div onClick={() => f('matchFromDatabase', !form.matchFromDatabase)} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all select-none ${form.matchFromDatabase ? 'border-blue-500/40 bg-blue-500/10' : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.04]'}`}>
+                  <div className={`w-10 h-5 rounded-full relative transition-colors ${form.matchFromDatabase ? 'bg-blue-500' : 'bg-white/10'}`}>
+                    <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${form.matchFromDatabase ? 'right-0.5' : 'left-0.5'}`} />
+                  </div>
+                  <span className={`text-xs font-bold uppercase tracking-widest ${form.matchFromDatabase ? 'text-blue-300' : 'text-slate-500'}`}>
+                    {form.matchFromDatabase ? 'Use existing CV database for best match' : 'Manual match only'}
                   </span>
                 </div>
               </div>

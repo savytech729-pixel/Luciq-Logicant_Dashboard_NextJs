@@ -7,10 +7,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import {
   BrainCircuit, Search, Filter, UploadCloud, FileText, CheckCircle2,
   Zap, Plus, Mail, MapPin, Clock, Banknote, UserPlus, Loader2,
-  AlertCircle, ChevronRight, Briefcase, Calendar, Target, Users, X
+  AlertCircle, ChevronRight, Briefcase, Calendar, Target, Users, X, Trash2
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTalent } from '@/lib/hooks/useTalent'
+import { PageHero, SurfaceCard } from '@/components/dashboard/Premium'
+import { ExtractionPreview } from '@/components/admin/ExtractionPreview'
+import { computeWeightedMatchScore } from '@/lib/match-score'
 
 const NOTICE_PERIODS = ['Immediate', '15 Days', '30 Days', '45 Days', '60 Days', '90 Days', 'Negotiable']
 const WORK_SETTING_PREFS = ['Remote', 'Hybrid', 'On-site']
@@ -37,7 +40,13 @@ export default function AdminCandidatesPage() {
   const [localCandidates, setLocalCandidates] = useState<any[]>([])
   const [pipeline, setPipeline] = useState<any[]>([])
   const [activeTab, setActiveTab] = useState<'pool' | 'pipeline'>('pool')
+  const [candidateFilter, setCandidateFilter] = useState<'all' | 'selected' | 'rejected'>('all')
+  const [pipelineStatusMap, setPipelineStatusMap] = useState<Record<string, string>>({})
+  const [reviewQueue, setReviewQueue] = useState<any[]>([])
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([])
+  const [reviewActionLoading, setReviewActionLoading] = useState(false)
   const [form, setForm] = useState({ ...EMPTY_CANDIDATE })
+  const [reviewQueueCount, setReviewQueueCount] = useState(0)
   const router = useRouter()
 
   // State for the Rapid AI CV Screener
@@ -49,10 +58,22 @@ export default function AdminCandidatesPage() {
   const [screenerError, setScreenerError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Bulk Upload State
+  // Bulk Upload State (parse all → explicit "Save all" like single-file flow)
   const [bulkFiles, setBulkFiles] = useState<File[]>([])
-  const [bulkResults, setBulkResults] = useState<{ name: string, status: 'pending' | 'success' | 'error', error?: string }[]>([])
+  const [bulkResults, setBulkResults] = useState<
+    {
+      name: string
+      status: 'pending' | 'parsing' | 'parsed' | 'saved' | 'error' | 'save_error'
+      error?: string
+      saveError?: string
+      extracted?: any
+      intelligence?: any
+    }[]
+  >([])
   const [processedCount, setProcessedCount] = useState(0)
+  const [bulkSaveLoading, setBulkSaveLoading] = useState(false)
+  const [screenIntelligence, setScreenIntelligence] = useState<any>(null)
+  const [bulkPreviewItem, setBulkPreviewItem] = useState<{ name: string; extracted: any; intelligence?: any } | null>(null)
 
   const fetchPipeline = useCallback(async () => {
     try {
@@ -69,6 +90,17 @@ export default function AdminCandidatesPage() {
       setLocalCandidates(candidates)
     }
     fetchPipeline()
+    fetch('/api/admin/candidates/review')
+      .then((r) => r.json())
+      .then((d) => {
+        setReviewQueueCount(d.count || 0)
+        setReviewQueue(d.candidates || [])
+      })
+      .catch(() => null)
+    fetch('/api/admin/pipeline/statuses')
+      .then((r) => r.json())
+      .then((d) => setPipelineStatusMap(d.statusMap || {}))
+      .catch(() => null)
   }, [candidates, fetchPipeline])
 
   const resetScreener = () => {
@@ -80,6 +112,54 @@ export default function AdminCandidatesPage() {
     setBulkFiles([])
     setBulkResults([])
     setProcessedCount(0)
+    setBulkSaveLoading(false)
+    setScreenIntelligence(null)
+    setBulkPreviewItem(null)
+  }
+
+  const handleBulkSaveAll = async () => {
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+    const toSave = bulkResults
+      .map((r, i) => ({ r, i }))
+      .filter(({ r }) => (r.status === 'parsed' || r.status === 'save_error') && r.extracted)
+    if (!toSave.length) return
+    setBulkSaveLoading(true)
+    try {
+      for (const { r, i } of toSave) {
+        try {
+          const saveRes = await fetch('/api/admin/candidates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ...r.extracted,
+              name: r.extracted?.name || r.name.replace(/\.[^.]+$/, ''),
+              currentRole: r.extracted?.currentRole || 'Candidate',
+              skills: Array.isArray(r.extracted.skills) ? r.extracted.skills.join(', ') : r.extracted.skills,
+            }),
+          })
+          const saveData = await saveRes.json().catch(() => ({}))
+          if (!saveRes.ok) {
+            setBulkResults((prev) =>
+              prev.map((row, idx) =>
+                idx === i ? { ...row, status: 'save_error' as const, saveError: saveData.error || 'Could not save' } : row
+              )
+            )
+            continue
+          }
+          setBulkResults((prev) =>
+            prev.map((row, idx) => (idx === i ? { ...row, status: 'saved' as const, saveError: undefined } : row))
+          )
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'Save failed'
+          setBulkResults((prev) =>
+            prev.map((row, idx) => (idx === i ? { ...row, status: 'save_error' as const, saveError: msg } : row))
+          )
+        }
+        await sleep(120)
+      }
+    } finally {
+      setBulkSaveLoading(false)
+    }
   }
 
   const handleFileUpload = async (e: any) => {
@@ -95,54 +175,86 @@ export default function AdminCandidatesPage() {
       setBulkResults(files.map(f => ({ name: f.name, status: 'pending' })))
       setProcessedCount(0)
 
+      const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
       let count = 0
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
+        setBulkResults((prev) => prev.map((r, idx) => (idx === i ? { ...r, status: 'parsing' as const } : r)))
         try {
           // Read file content as Base64 for real AI parsing
           const reader = new FileReader()
-          const fileData = await new Promise<{ base64: string, mimeType: string }>((resolve) => {
+          const fileData = await new Promise<{ base64: string, mimeType: string }>((resolve, reject) => {
             reader.onload = (e) => {
               const res = e.target?.result as string || ""
               const [header, base64] = res.split(';base64,')
+              if (!base64) {
+                reject(new Error('Unable to read file content'))
+                return
+              }
               resolve({
                 base64,
                 mimeType: header.split(':')[1] || "application/pdf"
               })
             }
+            reader.onerror = () => reject(new Error('File read failed'))
             reader.readAsDataURL(file)
           })
 
           // 1. Screen/Parse
-          const screenRes = await fetch('/api/admin/candidates/screen', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              fileName: file.name,
-              fileSize: file.size,
-              fileData
+          const runScreen = async () => {
+            const screenRes = await fetch('/api/admin/candidates/screen', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                fileName: file.name,
+                fileSize: file.size,
+                fileData
+              })
             })
-          })
-          const screenData = await screenRes.json()
-          if (!screenRes.ok) throw new Error(screenData.message || 'Parse failed')
+            const screenData = await screenRes.json().catch(() => ({}))
+            if (!screenRes.ok) {
+              const message = screenData.error || screenData.message || 'Parse failed'
+              throw new Error(`${message} (HTTP ${screenRes.status})`)
+            }
+            return screenData
+          }
 
-          // 2. Automatically Save
-          const saveRes = await fetch('/api/admin/candidates', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              ...screenData.candidate,
-              skills: Array.isArray(screenData.candidate.skills) ? screenData.candidate.skills.join(', ') : screenData.candidate.skills
-            }),
-          })
-          if (!saveRes.ok) throw new Error('Index failed')
+          const retryableHttp = (msg: string) =>
+            ['HTTP 429', 'HTTP 500', 'HTTP 503', 'HTTP 504'].some((h) => msg.includes(h))
 
-          setBulkResults(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'success' } : r))
+          let screenData: any
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              screenData = await runScreen()
+              break
+            } catch (e) {
+              const msg = String(e instanceof Error ? e.message : e)
+              if (attempt < 2 && retryableHttp(msg)) {
+                await sleep(800 * (attempt + 1))
+                continue
+              }
+              throw e
+            }
+          }
+
+          setBulkResults((prev) =>
+            prev.map((r, idx) =>
+              idx === i
+                ? {
+                    ...r,
+                    status: 'parsed' as const,
+                    extracted: screenData.candidate,
+                    intelligence: screenData.intelligence,
+                  }
+                : r
+            )
+          )
         } catch (err: any) {
           setBulkResults(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'error', error: err.message } : r))
         }
         count++
         setProcessedCount(count)
+        await sleep(280)
       }
 
     } else {
@@ -156,33 +268,48 @@ export default function AdminCandidatesPage() {
 
         // Read file content as Base64 for real AI parsing
         const reader = new FileReader()
-        const fileData = await new Promise<{ base64: string, mimeType: string }>((resolve) => {
+        const fileData = await new Promise<{ base64: string, mimeType: string }>((resolve, reject) => {
           reader.onload = (e) => {
             const res = e.target?.result as string || ""
             const [header, base64] = res.split(';base64,')
+            if (!base64) {
+              reject(new Error('Unable to read file content'))
+              return
+            }
             resolve({
               base64,
               mimeType: header.split(':')[1] || "application/pdf"
             })
           }
+          reader.onerror = () => reject(new Error('File read failed'))
           reader.readAsDataURL(file)
         })
 
         setParseStep(2) // Classification
 
-        const res = await fetch('/api/admin/candidates/screen', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fileName: file.name,
-            fileSize: file.size,
-            fileData
-          })
-        })
-        const data = await res.json()
+        const retryableStatus = (status: number) => [429, 500, 503, 504].includes(status)
+        const stall = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+        let res!: Response
+        let data: unknown
+        for (let attempt = 0; attempt < 3; attempt++) {
+          res = await fetch('/api/admin/candidates/screen', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileName: file.name,
+              fileSize: file.size,
+              fileData
+            })
+          })
+          data = await res.json()
+          if (res.ok || !retryableStatus(res.status) || attempt === 2) break
+          await stall(800 * (attempt + 1))
+        }
+
+        const body = data as { error?: string; message?: string; details?: string; candidate?: any }
         if (!res.ok) {
-          setScreenerError(`${data.error || data.message || 'AI Error'}: ${data.details || 'The AI model could not process this document.'}`)
+          setScreenerError(`${body.error || body.message || 'AI Error'}: ${body.details || 'The AI model could not process this document.'}`)
           setScreenerState('error')
           return
         }
@@ -190,18 +317,23 @@ export default function AdminCandidatesPage() {
         setParseStep(3) // Pinging Matrix
         await new Promise(r => setTimeout(r, 600))
 
-        const analyzedJobs = jobs.map((job: any) => {
-          const isMatch = (data.candidate.skills || []).some((s: string) =>
-            job.requiredSkills?.map((rs: string) => rs.toLowerCase()).includes(s.toLowerCase())
-          )
-          return {
+        const raw = body.candidate || {}
+        const skillsArr = Array.isArray(raw.skills)
+          ? raw.skills
+          : typeof raw.skills === 'string'
+            ? raw.skills.split(/[,;|]/).map((s: string) => s.trim()).filter(Boolean)
+            : []
+        const candidateForScore = { ...raw, skills: skillsArr }
+        const analyzedJobs = jobs
+          .map((job: any) => ({
             ...job,
-            matchScore: isMatch ? Math.floor(Math.random() * 10) + 90 : Math.floor(Math.random() * 30) + 15
-          }
-        }).sort((a: any, b: any) => b.matchScore - a.matchScore)
+            matchScore: computeWeightedMatchScore(job, candidateForScore).score,
+          }))
+          .sort((a: any, b: any) => b.matchScore - a.matchScore)
 
         setMatchedJobs(analyzedJobs)
-        setExtractedCandidate(data.candidate)
+        setExtractedCandidate(body.candidate)
+        setScreenIntelligence((body as { intelligence?: unknown }).intelligence ?? null)
         setParseStep(4)
         setScreenerState('matched')
       } catch (err) {
@@ -255,6 +387,101 @@ export default function AdminCandidatesPage() {
     }
   }
 
+  const handleDeleteCandidate = async (candidateId: string) => {
+    const ok = window.confirm('Delete this candidate profile? This cannot be undone.')
+    if (!ok) return
+    try {
+      const res = await fetch(`/api/admin/candidates/${candidateId}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to delete candidate')
+      setLocalCandidates(prev => prev.filter(c => c.id !== candidateId))
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (!selectedCandidateIds.length) return
+    const ok = window.confirm(`Delete ${selectedCandidateIds.length} selected candidates? This cannot be undone.`)
+    if (!ok) return
+    const res = await fetch('/api/admin/candidates/bulk-delete', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: selectedCandidateIds }),
+    })
+    if (!res.ok) return
+    setLocalCandidates(prev => prev.filter(c => !selectedCandidateIds.includes(c.id)))
+    setReviewQueue(prev => prev.filter(c => !selectedCandidateIds.includes(c.id)))
+    setSelectedCandidateIds([])
+  }
+
+  const handleReviewAction = async (action: 'approve' | 'reject' | 'edit', ids: string[], updates?: Record<string, string>) => {
+    if (!ids.length) return
+    setReviewActionLoading(true)
+    try {
+      const res = await fetch('/api/admin/candidates/review/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, ids, updates }),
+      })
+      if (!res.ok) return
+      const refreshed = await fetch('/api/admin/candidates/review').then(r => r.json())
+      setReviewQueue(refreshed.candidates || [])
+      setReviewQueueCount(refreshed.count || 0)
+      setSelectedCandidateIds([])
+    } finally {
+      setReviewActionLoading(false)
+    }
+  }
+
+  const bulkPendingSaveCount = bulkResults.filter(
+    (r) => (r.status === 'parsed' || r.status === 'save_error') && r.extracted
+  ).length
+  const bulkSavedCount = bulkResults.filter((r) => r.status === 'saved').length
+  const bulkParseErrorCount = bulkResults.filter((r) => r.status === 'error').length
+
+  const filteredCandidates = localCandidates.filter((c) => {
+    if (candidateFilter === 'all') return true
+    const status = pipelineStatusMap[c.id]
+    if (candidateFilter === 'selected') return status === 'SELECTED'
+    if (candidateFilter === 'rejected') return status === 'REJECTED'
+    return true
+  })
+  const displayName = (name: string, email?: string, parseSourceFile?: string) => {
+    const value = String(name || '').trim()
+    if (!value) return 'Candidate'
+    if (value.includes(' ')) return value
+    const local = String(email || '').split('@')[0] || ''
+    const parts = local
+      .replace(/[0-9]+/g, ' ')
+      .split(/[._-]+/)
+      .map((p) => p.trim())
+      .filter(Boolean)
+    if (parts.length >= 2) {
+      return parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ')
+    }
+    const fromFile = String(parseSourceFile || '')
+      .replace(/\.[a-z0-9]+$/i, '')
+      .replace(/\[[^\]]*\]/g, ' ')
+      .split(/[_-]+/)
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .pop() || ''
+    const splitFileName = fromFile.replace(/([a-z])([A-Z])/g, '$1 $2').trim()
+    if (splitFileName.includes(' ')) {
+      return splitFileName.split(' ').map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ')
+    }
+    return value.charAt(0).toUpperCase() + value.slice(1)
+  }
+  const displayEmail = (email?: string) => {
+    const value = String(email || '').trim()
+    if (!value || value.includes('@placeholder.local')) return 'Email not extracted from CV'
+    return value
+  }
+  const filteredCandidateIds = filteredCandidates.map((c) => c.id)
+  const selectedVisibleCount = filteredCandidateIds.filter((id) => selectedCandidateIds.includes(id)).length
+  const allVisibleSelected = filteredCandidateIds.length > 0 && selectedVisibleCount === filteredCandidateIds.length
+
   if (loading) return (
     <div className="flex items-center justify-center min-h-[400px]">
       <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
@@ -263,27 +490,32 @@ export default function AdminCandidatesPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-700 pb-20">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-white mb-1">Talent Management</h1>
-          <p className="text-slate-400 font-medium tracking-tight">AI-powered recruitment and candidate pipeline tracking.</p>
-        </div>
-
-        <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
-          <button
-            onClick={() => setActiveTab('pool')}
-            className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'pool' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
-          >
-            Talent Pool
-          </button>
-          <button
-            onClick={() => setActiveTab('pipeline')}
-            className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'pipeline' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
-          >
-            Active Pipeline
-          </button>
-        </div>
-      </div>
+      <PageHero
+        eyebrow="Candidate Operations"
+        title="Talent Management"
+        description="AI-powered recruitment and candidate pipeline tracking."
+        right={(
+          <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
+            <button
+              onClick={() => setActiveTab('pool')}
+              className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'pool' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+            >
+              Talent Pool
+            </button>
+            <button
+              onClick={() => setActiveTab('pipeline')}
+              className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'pipeline' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+            >
+              Active Pipeline
+            </button>
+          </div>
+        )}
+      />
+      {reviewQueueCount > 0 && (
+        <SurfaceCard className="p-3 border-amber-500/20 bg-amber-500/5">
+          <p className="text-amber-300 text-xs font-semibold">Review Queue: {reviewQueueCount} CV(s) need manual validation</p>
+        </SurfaceCard>
+      )}
 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex gap-3 w-full md:w-auto items-center flex-wrap">
@@ -316,7 +548,7 @@ export default function AdminCandidatesPage() {
             <DialogTrigger className="bg-white/[0.05] hover:bg-white/10 border border-white/10 text-white rounded-xl px-4 py-2.5 flex items-center text-[10px] font-black uppercase tracking-widest transition-all">
               <Zap className="mr-2 h-4 w-4 text-blue-400" /> Upload Resume's
             </DialogTrigger>
-            <DialogContent showCloseButton={false} className="glass-card border border-white/10 text-white sm:max-w-xl p-0 overflow-hidden">
+            <DialogContent showCloseButton={false} className="glass-card border border-white/10 text-white sm:max-w-2xl p-0 overflow-hidden">
               <DialogClose className="absolute top-4 right-4 z-[60] p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all pointer-events-auto">
                 <X className="w-4 h-4" />
               </DialogClose>
@@ -339,7 +571,10 @@ export default function AdminCandidatesPage() {
                       <input type="file" multiple className="hidden" ref={fileInputRef} onChange={handleFileUpload} accept=".pdf,.doc,.docx,.txt" />
                       <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><UploadCloud className="w-8 h-8 text-blue-400" /></div>
                       <h3 className="text-white font-bold text-lg mb-1">Drop CVs Here</h3>
-                      <p className="text-slate-400 text-sm font-medium">Upload one or multiple resumes to automatically index them into the talent pool.</p>
+                      <p className="text-slate-400 text-sm font-medium">Upload multiple resumes: we parse each CV first, then you save them all to the talent pool in one click.</p>
+                      <p className="text-slate-500 text-xs mt-3 max-w-sm mx-auto leading-relaxed">
+                        Same pipeline as single upload (Document AI when configured, then AI extraction). Use Preview on any row, then choose Save all when ready.
+                      </p>
                     </motion.div>
                   )}
 
@@ -347,8 +582,8 @@ export default function AdminCandidatesPage() {
                     <motion.div key="bulk" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
                       <div className="flex items-center justify-between">
                         <div>
-                          <h3 className="text-lg font-bold text-white">Bulk Indexing</h3>
-                          <p className="text-xs text-slate-500 uppercase font-black tracking-widest mt-1">Processing {processedCount} of {bulkFiles.length} files</p>
+                          <h3 className="text-lg font-bold text-white">Bulk parse</h3>
+                          <p className="text-xs text-slate-500 uppercase font-black tracking-widest mt-1">OCR + AI per file · {processedCount} of {bulkFiles.length}</p>
                         </div>
                         <div className="text-right">
                           <div className="text-2xl font-black text-blue-500">{Math.round((processedCount / bulkFiles.length) * 100)}%</div>
@@ -365,28 +600,105 @@ export default function AdminCandidatesPage() {
 
                       <div className="space-y-2 max-h-[30vh] overflow-y-auto pr-2 custom-scrollbar">
                         {bulkResults.map((res, i) => (
-                          <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/5">
+                          <div key={i} className="flex items-center justify-between gap-2 p-3 rounded-xl bg-white/[0.02] border border-white/5">
                             <div className="flex items-center gap-3 min-w-0">
-                              <FileText className={`w-4 h-4 shrink-0 ${res.status === 'success' ? 'text-emerald-400' : res.status === 'error' ? 'text-red-400' : 'text-slate-500'}`} />
-                              <span className="text-sm font-medium text-slate-300 truncate">{res.name}</span>
+                              <FileText
+                                className={`w-4 h-4 shrink-0 ${
+                                  res.status === 'saved'
+                                    ? 'text-emerald-400'
+                                    : res.status === 'error' || res.status === 'save_error'
+                                      ? 'text-red-400'
+                                      : res.status === 'parsed'
+                                        ? 'text-amber-400'
+                                        : 'text-slate-500'
+                                }`}
+                              />
+                              <div className="min-w-0">
+                                <span className="text-sm font-medium text-slate-300 truncate block">{res.name}</span>
+                                {res.status === 'save_error' && res.saveError && (
+                                  <span className="text-[10px] text-red-400/90 truncate block" title={res.saveError}>
+                                    {res.saveError}
+                                  </span>
+                                )}
+                                {res.status === 'error' && res.error && (
+                                  <span className="text-[10px] text-red-400/90 truncate block" title={res.error}>
+                                    {res.error}
+                                  </span>
+                                )}
+                                {res.status === 'saved' && (
+                                  <span className="text-[10px] text-emerald-500/80 font-bold uppercase tracking-wider">In talent pool</span>
+                                )}
+                                {res.status === 'parsed' && (
+                                  <span className="text-[10px] text-amber-500/80 font-bold uppercase tracking-wider">Ready to save</span>
+                                )}
+                              </div>
                             </div>
-                            {res.status === 'pending' && <Loader2 className="w-3.5 h-3.5 text-blue-500 animate-spin" />}
-                            {res.status === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
-                            {res.status === 'error' && <AlertCircle className="w-4 h-4 text-red-500" />}
+                            <div className="flex items-center gap-2 shrink-0">
+                              {res.extracted && (res.status === 'parsed' || res.status === 'saved' || res.status === 'save_error') && (
+                                <button
+                                  type="button"
+                                  onClick={() => setBulkPreviewItem({ name: res.name, extracted: res.extracted, intelligence: res.intelligence })}
+                                  className="text-[10px] font-black uppercase tracking-wider text-blue-400 hover:text-blue-300 px-2 py-1 rounded-lg border border-blue-500/30 bg-blue-500/10"
+                                >
+                                  Preview
+                                </button>
+                              )}
+                              {(res.status === 'pending' || res.status === 'parsing') && <Loader2 className="w-3.5 h-3.5 text-blue-500 animate-spin" />}
+                              {res.status === 'saved' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                              {res.status === 'parsed' && <span className="text-[9px] font-black text-amber-500/90 uppercase">Unsaved</span>}
+                              {res.status === 'error' && <AlertCircle className="w-4 h-4 text-red-500" />}
+                              {res.status === 'save_error' && <AlertCircle className="w-4 h-4 text-amber-500" />}
+                            </div>
                           </div>
                         ))}
+                        {bulkResults.some((r) => r.status === 'error' && r.error) && (
+                          <p className="text-xs text-red-300 mt-2">
+                            Last error: {bulkResults.find((r) => r.status === 'error' && r.error)?.error}
+                          </p>
+                        )}
                       </div>
 
                       {processedCount === bulkFiles.length && (
-                        <button
-                          onClick={() => {
-                            setIsScreenerOpen(false)
-                            window.location.reload()
-                          }}
-                          className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all shadow-lg"
-                        >
-                          Refresh Talent Pool
-                        </button>
+                        <div className="space-y-3">
+                          <p className="text-center text-xs text-slate-500">
+                            Done · {bulkFiles.length} file{bulkFiles.length === 1 ? '' : 's'}
+                            {bulkSavedCount > 0 ? ` · ${bulkSavedCount} saved` : ''}
+                            {bulkPendingSaveCount > 0 ? ` · ${bulkPendingSaveCount} ready to save` : ''}
+                            {bulkParseErrorCount > 0 ? ` · ${bulkParseErrorCount} parse error${bulkParseErrorCount === 1 ? '' : 's'}` : ''}
+                          </p>
+                          {bulkPendingSaveCount > 0 && (
+                            <button
+                              type="button"
+                              disabled={bulkSaveLoading}
+                              onClick={() => void handleBulkSaveAll()}
+                              className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
+                            >
+                              {bulkSaveLoading ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin" /> Saving…
+                                </>
+                              ) : (
+                                <>
+                                  <Plus className="w-4 h-4" /> Save all to talent pool ({bulkPendingSaveCount})
+                                </>
+                              )}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            disabled={bulkSaveLoading}
+                            onClick={() => {
+                              setIsScreenerOpen(false)
+                              window.location.reload()
+                            }}
+                            className="w-full py-3 border border-white/15 bg-white/[0.03] hover:bg-white/[0.06] text-slate-200 font-black text-[10px] uppercase tracking-widest rounded-xl transition-all"
+                          >
+                            Refresh talent pool
+                          </button>
+                          <p className="text-[10px] text-center text-slate-600 leading-relaxed px-2">
+                            Saving adds each parsed CV to the database. Refresh reloads the list so new profiles appear.
+                          </p>
+                        </div>
                       )}
                     </motion.div>
                   )}
@@ -407,17 +719,26 @@ export default function AdminCandidatesPage() {
                   )}
 
                   {screenerState === 'matched' && extractedCandidate && (
-                    <motion.div key="matched" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4 max-h-[60vh] overflow-y-auto scrollbar-hide">
-                      <div className="p-5 bg-blue-500/10 border border-blue-500/20 rounded-2xl mb-6">
-                        <div className="flex justify-between items-start mb-3">
-                          <h4 className="text-blue-400 font-bold flex items-center"><CheckCircle2 className="w-4 h-4 mr-2" /> Resume Analyzed</h4>
-                          <span className="text-[10px] font-black uppercase text-blue-400/50 tracking-[0.2em]">Verified Extract</span>
+                    <motion.div key="matched" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4 max-h-[72vh] overflow-y-auto scrollbar-hide pr-1">
+                      <div className="p-5 bg-gradient-to-b from-blue-500/15 to-white/[0.02] border border-blue-500/25 rounded-2xl">
+                        <div className="flex justify-between items-start mb-4">
+                          <h4 className="text-blue-400 font-bold flex items-center text-lg"><CheckCircle2 className="w-5 h-5 mr-2" /> Extracted CV preview</h4>
+                          <span className="text-[10px] font-black uppercase text-blue-400/60 tracking-[0.2em]">Review before save</span>
                         </div>
-                        <div className="grid grid-cols-2 gap-4 pt-3 border-t border-white/5">
-                          <div><p className="text-[10px] uppercase font-black text-slate-500 tracking-widest mb-1">Candidate</p><p className="text-sm font-bold text-white">{extractedCandidate.name}</p></div>
-                          <div><p className="text-[10px] uppercase font-black text-slate-500 tracking-widest mb-1">Target Role</p><p className="text-sm font-bold text-white">{extractedCandidate.currentRole}</p></div>
-                        </div>
-                        <button onClick={handleSaveExtracted} disabled={addLoading} className="w-full mt-5 h-10 bg-blue-600 hover:bg-blue-500 text-white font-black text-[10px] uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50">{addLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4" /> Save to Talent Pool</>}</button>
+                        <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+                          Same field layout as intelligent capture: confirm email, skills, education, and summary. Adjust the CV or re-upload if anything looks wrong, then save.
+                        </p>
+                        <ExtractionPreview
+                          data={extractedCandidate}
+                          intelligence={screenIntelligence}
+                        />
+                        <button
+                          onClick={handleSaveExtracted}
+                          disabled={addLoading}
+                          className="w-full mt-6 h-11 bg-blue-600 hover:bg-blue-500 text-white font-black text-[10px] uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-lg shadow-blue-900/30"
+                        >
+                          {addLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4" /> Save to Talent Pool</>}
+                        </button>
                       </div>
                       <h4 className="text-[10px] uppercase tracking-widest text-slate-500 font-black mb-2 flex items-center gap-2 px-1"><Target className="w-3 h-3" /> Vacancy Matching</h4>
                       <div className="grid gap-2">
@@ -448,6 +769,23 @@ export default function AdminCandidatesPage() {
             </DialogContent>
           </Dialog>
 
+          <Dialog open={!!bulkPreviewItem} onOpenChange={(open) => { if (!open) setBulkPreviewItem(null) }}>
+            <DialogContent className="glass-card border border-white/10 text-white sm:max-w-2xl max-h-[88vh] overflow-hidden flex flex-col p-0">
+              <DialogHeader className="p-6 pb-2 shrink-0 border-b border-white/10">
+                <DialogTitle className="text-white text-lg">Extracted fields · {bulkPreviewItem?.name}</DialogTitle>
+              </DialogHeader>
+              <div className="overflow-y-auto px-6 pb-6 flex-1 min-h-0">
+                {bulkPreviewItem && (
+                  <ExtractionPreview
+                    data={bulkPreviewItem.extracted}
+                    intelligence={bulkPreviewItem.intelligence}
+                    fileLabel={bulkPreviewItem.name}
+                  />
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+
           <div className="relative flex-1 md:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
             <input type="text" placeholder="Search parameters..." className="w-full bg-white/[0.02] border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:border-blue-500 outline-none transition-colors" />
@@ -457,23 +795,124 @@ export default function AdminCandidatesPage() {
 
       {activeTab === 'pool' ? (
         <div className="grid gap-5">
-          {localCandidates.map((c) => (
-            <div key={c.id} onClick={() => router.push(`/admin/candidates/${c.id}`)} className="glass-card flex flex-col md:flex-row items-stretch p-0 border-white/5 overflow-hidden cursor-pointer hover:border-blue-500/40 hover:bg-white/[0.04] transition-all group">
-              <div className={`w-1.5 shrink-0 ${c.globalScore >= 85 ? 'bg-blue-500 shadow-[0_0_15px_#2563eb]' : 'bg-slate-700'}`} />
-              <div className="flex-1 flex flex-col md:flex-row items-center p-6 gap-6 relative">
-                <div className="flex items-center gap-4 w-full md:w-1/3">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-violet-700 flex items-center justify-center text-white font-black text-xl shadow-lg group-hover:scale-105 transition-transform">{c.name.charAt(0)}</div>
-                  <div className="min-w-0"><h3 className="text-lg font-bold text-white group-hover:text-blue-400 transition-colors truncate">{c.name}</h3><div className="flex items-center gap-2 mt-0.5"><span className="text-xs text-slate-400 font-medium truncate">{c.currentRole}</span>{c.isReadyToJoin && <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />}</div></div>
+          {reviewQueueCount > 0 && (
+            <Card className="glass-card border border-amber-500/20 bg-amber-500/5">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm text-amber-300 flex items-center justify-between">
+                  <span>Review Queue Workflow</span>
+                  <span className="text-xs">{reviewQueueCount} pending</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <button disabled={reviewActionLoading || selectedCandidateIds.length === 0} onClick={() => handleReviewAction('approve', selectedCandidateIds)} className="px-3 py-1.5 rounded-lg text-xs bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 disabled:opacity-50">Approve</button>
+                  <button disabled={reviewActionLoading || selectedCandidateIds.length === 0} onClick={() => handleReviewAction('reject', selectedCandidateIds)} className="px-3 py-1.5 rounded-lg text-xs bg-red-600/20 border border-red-500/30 text-red-300 disabled:opacity-50">Reject</button>
                 </div>
-                <div className="flex-1 grid grid-cols-2 lg:grid-cols-4 gap-4 w-full">
+                <div className="space-y-2">
+                  {reviewQueue.slice(0, 8).map((item) => (
+                    <div key={item.id} className="flex items-center justify-between rounded-lg border border-white/10 p-2.5">
+                      <label className="flex items-center gap-2 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={selectedCandidateIds.includes(item.id)}
+                          onChange={(e) => {
+                            setSelectedCandidateIds((prev) => e.target.checked ? [...prev, item.id] : prev.filter((id) => id !== item.id))
+                          }}
+                        />
+                        <span className="text-sm text-white truncate">{item.name}</span>
+                      </label>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleReviewAction('approve', [item.id])} className="text-xs text-emerald-300">Approve</button>
+                        <button onClick={() => {
+                          const name = window.prompt('Name', item.name || '') || item.name
+                          const role = window.prompt('Current role', item.currentRole || '') || item.currentRole
+                          const exp = window.prompt('Total experience', String(item.totalExperience || '')) || String(item.totalExperience || '')
+                          const skills = window.prompt('Skills (comma separated)', Array.isArray(item.skills) ? item.skills.join(', ') : '') || ''
+                          handleReviewAction('edit', [item.id], { name, currentRole: role, totalExperience: exp, skills })
+                        }} className="text-xs text-blue-300">Edit</button>
+                        <button onClick={() => handleReviewAction('reject', [item.id])} className="text-xs text-red-300">Reject</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          <div className="flex gap-2 flex-wrap">
+            {(['all', 'selected', 'rejected'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setCandidateFilter(tab)}
+                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${candidateFilter === tab ? 'bg-blue-600 text-white border-blue-500/50' : 'bg-white/[0.02] text-slate-400 border-white/10 hover:text-white'}`}
+              >
+                {tab}
+              </button>
+            ))}
+            <button
+              disabled={selectedCandidateIds.length === 0}
+              onClick={handleBulkDelete}
+              className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all bg-red-600/20 text-red-300 border-red-500/30 disabled:opacity-40"
+            >
+              Bulk Delete ({selectedCandidateIds.length})
+            </button>
+            <button
+              onClick={() => {
+                if (allVisibleSelected) {
+                  setSelectedCandidateIds((prev) => prev.filter((id) => !filteredCandidateIds.includes(id)))
+                } else {
+                  setSelectedCandidateIds((prev) => Array.from(new Set([...prev, ...filteredCandidateIds])))
+                }
+              }}
+              className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all bg-white/[0.03] text-slate-300 border-white/10 hover:text-white"
+            >
+              {allVisibleSelected ? 'Unselect Visible' : `Select Visible (${filteredCandidates.length})`}
+            </button>
+          </div>
+          <div className="hidden lg:grid grid-cols-12 gap-3 px-4 py-2 text-[11px] text-slate-500 uppercase tracking-wider border border-white/10 rounded-xl bg-white/[0.02]">
+            <div className="col-span-6">Candidate</div>
+            <div className="col-span-2">Notice</div>
+            <div className="col-span-2">Experience</div>
+            <div className="col-span-2">Location</div>
+          </div>
+          {filteredCandidates.map((c) => (
+            <div key={c.id} onClick={() => router.push(`/admin/candidates/${c.id}`)} className={`glass-card p-5 cursor-pointer hover:border-blue-500/40 hover:bg-white/[0.04] transition-all group shadow-sm ${selectedCandidateIds.includes(c.id) ? 'border-blue-500/50 bg-blue-500/5' : 'border-white/10'}`}>
+              <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+                <div className="flex items-center gap-3 min-w-0 lg:w-[42%] xl:w-[40%]">
+                  <input
+                    type="checkbox"
+                    checked={selectedCandidateIds.includes(c.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setSelectedCandidateIds((prev) => e.target.checked ? [...prev, c.id] : prev.filter((id) => id !== c.id))}
+                  />
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-violet-700 flex items-center justify-center text-white font-bold text-lg">
+                    {displayName(c.name, c.email, c.parseSourceFile).charAt(0)}
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-lg font-semibold text-white truncate">{displayName(c.name, c.email, c.parseSourceFile)}</h3>
+                    <p className="text-sm text-slate-400 truncate">{c.currentRole || 'Candidate'}</p>
+                    <p className="text-xs text-slate-500 truncate">{displayEmail(c.email)}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 lg:flex-1">
                   <TelemetryItem icon={<Clock className="w-3.5 h-3.5 text-amber-400" />} label="Notice" value={c.noticePeriod || 'N/A'} />
-                  <TelemetryItem icon={<Briefcase className="w-3.5 h-3.5 text-blue-400" />} label="Exp" value={`${c.totalExperience || c.experienceYears} Yrs`} />
+                  <TelemetryItem icon={<Briefcase className="w-3.5 h-3.5 text-blue-400" />} label="Experience" value={`${c.totalExperience || c.experienceYears || 0} Yrs`} />
                   <TelemetryItem icon={<MapPin className="w-3.5 h-3.5 text-red-400" />} label="Location" value={c.preferredLocation || 'Anywhere'} />
-                  <TelemetryItem icon={<Banknote className="w-3.5 h-3.5 text-emerald-400" />} label="Expected" value={c.expectedSalary || 'Nego'} />
+                  <TelemetryItem icon={<Banknote className="w-3.5 h-3.5 text-emerald-400" />} label="Expected" value={c.expectedSalary || 'Negotiable'} />
                 </div>
-                <div className="flex items-center justify-between w-full md:w-40 shrink-0 md:pl-6 md:border-l border-white/10">
-                  <div className="text-right flex-1 md:flex-none"><p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-0.5">AI Best Match</p><div className="text-2xl font-black text-white">{c.globalScore || 82}<span className="text-xs text-slate-500 font-normal ml-0.5">/100</span></div></div>
-                  <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-blue-400 group-hover:translate-x-1 transition-all ml-4" />
+
+                <div className="flex items-center justify-end gap-2 shrink-0 mt-2 lg:mt-0">
+                  {c.parseNeedsReview && (
+                    <span className="text-[10px] text-amber-400 uppercase tracking-widest hidden sm:inline">Needs review</span>
+                  )}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDeleteCandidate(c.id) }}
+                    className="p-2 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-all"
+                    title="Delete candidate"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                  <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-blue-400 group-hover:translate-x-1 transition-all" />
                 </div>
               </div>
             </div>

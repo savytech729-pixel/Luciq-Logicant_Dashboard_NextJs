@@ -11,6 +11,9 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [otpRequired, setOtpRequired] = useState(false)
+  const [otp, setOtp] = useState('')
+  const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
@@ -25,6 +28,10 @@ export default function LoginPage() {
       setError('Please enter your password.')
       return false
     }
+    if (otpRequired && otp.length !== 6) {
+      setError('Please enter a valid 6-digit OTP.')
+      return false
+    }
     return true
   }
 
@@ -34,12 +41,13 @@ export default function LoginPage() {
 
     setIsLoading(true)
     setError('')
+    setNotice('')
 
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(otpRequired ? { email, password, otp } : { email, password }),
       })
 
       const data = await res.json()
@@ -48,17 +56,46 @@ export default function LoginPage() {
         throw new Error(data.error || 'Invalid credentials')
       }
 
-      setIsSuccess(true)
-      setTimeout(() => {
-        if (!data.isOnboarded) {
-          router.push('/onboarding')
-        } else if (data.role === 'ADMIN') {
-          router.push('/admin/dashboard')
-        } else {
-          router.push('/candidate/dashboard')
-        }
-        router.refresh()
-      }, 1500)
+      if (data.otpRequired) {
+        setOtpRequired(true)
+        setNotice('OTP sent to your email. Enter it to complete login.')
+      } else {
+        setIsSuccess(true)
+        setTimeout(() => {
+          if (!data.isOnboarded) {
+            router.push('/onboarding')
+          } else if (data.role === 'ADMIN') {
+            router.push('/admin/dashboard')
+          } else {
+            router.push('/candidate/dashboard')
+          }
+          router.refresh()
+        }, 1500)
+      }
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleResendOtp = async () => {
+    if (!email || !password) {
+      setError('Enter email and password first.')
+      return
+    }
+    setIsLoading(true)
+    setError('')
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to resend OTP')
+      setOtpRequired(true)
+      setNotice('New OTP sent. Please check your inbox.')
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -112,6 +149,15 @@ export default function LoginPage() {
                     <span>{error}</span>
                   </motion.div>
                 )}
+                {notice && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-sm text-blue-200 bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl"
+                  >
+                    {notice}
+                  </motion.div>
+                )}
                 <div className="space-y-2">
                   <Label className="text-slate-400 text-xs font-bold uppercase tracking-wider">Email Address</Label>
                   <div className="relative">
@@ -143,10 +189,32 @@ export default function LoginPage() {
                     </button>
                   </div>
                 </div>
+                {otpRequired && (
+                  <div className="space-y-2">
+                    <Label className="text-slate-400 text-xs font-bold uppercase tracking-wider">Login OTP</Label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder="Enter 6-digit OTP"
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                      className="w-full bg-white/[0.02] border border-white/10 focus:border-blue-500 text-white h-12 px-4 rounded-xl outline-none transition-all tracking-[0.35em] text-center"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleResendOtp}
+                      disabled={isLoading}
+                      className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                    >
+                      Resend OTP
+                    </button>
+                  </div>
+                )}
                 <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold h-14 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 group" disabled={isLoading}>
-                  {isLoading ? 'Authenticating...' : (
+                  {isLoading ? (otpRequired ? 'Verifying OTP...' : 'Authenticating...') : (
                     <>
-                      Sign In <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                      {otpRequired ? 'Verify & Sign In' : 'Sign In'} <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                     </>
                   )}
                 </button>

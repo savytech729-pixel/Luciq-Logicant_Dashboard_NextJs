@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSession, login } from '@/lib/auth'
+import { asTrimmedString } from '@/lib/validators'
 
 export async function POST(req: Request) {
   try {
@@ -10,7 +11,17 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json()
-    const { name, phone, address, designation, department, isFresher, role } = body
+    const name = asTrimmedString(body.name)
+    const phone = asTrimmedString(body.phone)
+    const address = asTrimmedString(body.address)
+    const designation = asTrimmedString(body.designation)
+    const department = asTrimmedString(body.department)
+    const role = asTrimmedString(body.role).toUpperCase()
+    const isFresher = Boolean(body.isFresher)
+
+    if (!name || !role || (role !== 'CANDIDATE' && role !== 'ADMIN')) {
+      return NextResponse.json({ error: 'Invalid onboarding payload' }, { status: 400 })
+    }
 
     // 1. Update User
     await prisma.user.update({

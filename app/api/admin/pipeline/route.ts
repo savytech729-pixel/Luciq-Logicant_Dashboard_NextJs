@@ -12,7 +12,7 @@ export async function GET() {
     const matches = await prisma.pipelineMatch.findMany({
       where: {
         status: {
-          in: ['SHORTLISTED', 'SELECTED']
+          in: ['SCREENING', 'SHORTLISTED', 'SELECTED']
         }
       },
       include: {
@@ -28,11 +28,22 @@ export async function GET() {
       }
     })
 
+    // De-duplicate by (jobId, candidateId): keep latest state only.
+    const latestByPair = new Map<string, (typeof matches)[number]>()
+    for (const match of matches) {
+      const key = `${match.jobId}:${match.candidateId}`
+      const prev = latestByPair.get(key)
+      if (!prev || new Date(match.updatedAt).getTime() >= new Date(prev.updatedAt).getTime()) {
+        latestByPair.set(key, match)
+      }
+    }
+    const uniqueMatches = Array.from(latestByPair.values())
+
     // Fetch candidate details separately or use join if possible
     // Since MongoDB in Prisma doesn't support easy joins across collections without relations
     // and we didn't define a back-relation for Candidate in PipelineMatch yet in schema (let's check)
     
-    const pipelineData = await Promise.all(matches.map(async (m) => {
+    const pipelineData = await Promise.all(uniqueMatches.map(async (m) => {
       const candidate = await prisma.candidate.findUnique({
         where: { id: m.candidateId }
       })

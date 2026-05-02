@@ -8,20 +8,20 @@ import { hash, compare } from 'bcryptjs'
 export async function GET() {
   try {
     const session = await getSession()
-    console.log('[API] Admin Profile Session:', session)
 
     if (!session || session.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const user = await prisma.user.findFirst({
-      where: { email: session.email },
+    const user = await prisma.user.findUnique({
+      where: { id: session.id },
       select: {
         id: true,
         email: true,
         role: true,
         name: true,
         phone: true,
+        avatarUrl: true,
         jobTitle: true,
         department: true,
         createdAt: true,
@@ -51,7 +51,7 @@ export async function PATCH(req: Request) {
     }
 
     const body = await req.json()
-    const { email, name, phone, jobTitle, department, currentPassword, newPassword } = body
+    const { email, name, phone, avatarUrl, jobTitle, department, currentPassword, newPassword } = body
 
     // Fetch the current user to verify password if changing it
     const user = await prisma.user.findUnique({ where: { id: session.id } })
@@ -72,6 +72,19 @@ export async function PATCH(req: Request) {
     
     if (name !== undefined) updateData.name = name
     if (phone !== undefined) updateData.phone = phone
+    if (avatarUrl !== undefined) {
+      if (typeof avatarUrl !== 'string') {
+        return NextResponse.json({ error: 'Invalid avatar' }, { status: 400 })
+      }
+      const trimmed = avatarUrl.trim()
+      if (trimmed.length > 480_000) {
+        return NextResponse.json(
+          { error: 'Profile photo is too large. Use a smaller image or JPG/PNG under ~2MB before upload.' },
+          { status: 400 }
+        )
+      }
+      updateData.avatarUrl = trimmed || null
+    }
     if (jobTitle !== undefined) updateData.jobTitle = jobTitle
     if (department !== undefined) updateData.department = department
 
@@ -94,7 +107,7 @@ export async function PATCH(req: Request) {
     const updated = await prisma.user.update({
       where: { id: session.id },
       data: updateData,
-      select: { id: true, email: true, role: true, name: true, phone: true, jobTitle: true, department: true, createdAt: true },
+      select: { id: true, email: true, role: true, name: true, phone: true, avatarUrl: true, jobTitle: true, department: true, createdAt: true },
     })
 
     return NextResponse.json({ user: updated, message: 'Profile updated successfully' })

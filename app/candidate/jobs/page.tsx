@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { BrainCircuit, Briefcase, Zap, CheckCircle2, AlertCircle } from 'lucide-react'
+import { PageHero, SurfaceCard } from '@/components/dashboard/Premium'
 
 import { useCandidate } from '@/lib/hooks/useCandidate'
 
@@ -92,10 +93,11 @@ export default function CandidateJobsPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-700">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-white mb-2">Available Vacancies</h1>
-        <p className="text-slate-400">View open vacancies and your AI match score.</p>
-      </div>
+      <PageHero
+        eyebrow="Opportunity Center"
+        title="Available Vacancies"
+        description="View open vacancies and your AI match score."
+      />
 
       {/* AI SCREENING DIALOG */}
       <AnimatePresence>
@@ -180,9 +182,9 @@ export default function CandidateJobsPage() {
       </AnimatePresence>
 
       {jobs.length === 0 ? (
-        <Card className="glass-card bg-transparent shadow-none text-center py-16 border-dashed border-white/20">
+        <SurfaceCard className="text-center py-16 border-dashed border-white/20">
           <p className="text-slate-500">No active vacancies found in the system.</p>
-        </Card>
+        </SurfaceCard>
       ) : (
         <div className="grid gap-6 md:grid-cols-2">
           {jobs.map((job) => {

@@ -3,11 +3,14 @@ import { prisma } from '@/lib/prisma'
 export const dashboardService = {
   async getAdminStats() {
     try {
-      const [candidatesCount, jobsCount, placementsResult, aiFraudCount] = await Promise.all([
+      const [candidatesCount, jobsCount, placementsResult, aiFraudCount, jobsRaw, hiredCount, rejectedCount] = await Promise.all([
         (prisma as any).$runCommandRaw({ count: 'Candidate' }),
         (prisma as any).$runCommandRaw({ count: 'Job' }),
         (prisma as any).$runCommandRaw({ find: 'Placement' }),
-        prisma.pipelineMatch.count({ where: { isAIUsageDetected: true } })
+        prisma.pipelineMatch.count({ where: { isAIUsageDetected: true } }),
+        prisma.job.findMany({ select: { status: true, createdAt: true } }),
+        prisma.pipelineMatch.count({ where: { status: 'SELECTED' } }),
+        prisma.pipelineMatch.count({ where: { status: 'REJECTED' } }),
       ])
 
       const placements = (placementsResult as any)?.cursor?.firstBatch ?? []
@@ -20,13 +23,27 @@ export const dashboardService = {
 
       // Calculate pipeline data (last 6 months)
       const pipelineData = await this.getPipelineData()
+      const now = Date.now()
+      const activeJobs = jobsRaw.filter((j) => j.status === 'Active').length
+      const closedJobs = jobsRaw.filter((j) => j.status === 'Closed').length
+      const onHoldJobs = jobsRaw.filter((j) => j.status === 'On Hold').length
+      const deadlineRiskJobs = jobsRaw.filter((j) => {
+        if (j.status !== 'Active') return false
+        const ageDays = Math.floor((now - new Date(j.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+        return ageDays > 45
+      }).length
 
       return {
         candidates: (candidatesCount as any)?.n ?? 0,
         jobs: (jobsCount as any)?.n ?? 0,
+        activeJobs,
+        closedJobs,
+        onHoldJobs,
+        hiredCount,
+        nonHiredCount: rejectedCount,
+        deadlineRiskJobs,
         aiFraudAlerts: aiFraudCount,
         placementYield: `₹${(totalRevenue / 10000000).toFixed(2)}Cr`,
-        matchVelocity: '4.2s', // AI engine overhead
         pipelineData,
         recentActivity: this.mapPlacementsToActivity(placements.slice(0, 3))
       }

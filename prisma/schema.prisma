@@ -31,9 +31,11 @@ model User {
   role      UserRole
   name      String?
   phone     String?
+  avatarUrl String?
   jobTitle  String?
   department String?
   isOnboarded Boolean    @default(false)
+  emailVerified Boolean  @default(false)
   createdAt DateTime   @default(now())
 
   candidate Candidate?
@@ -42,6 +44,20 @@ model User {
 
   clientId  String?    @db.ObjectId
   client    Client?    @relation(fields: [clientId], references: [id])
+}
+
+model EmailOtp {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  email        String
+  purpose      String
+  otpHash      String
+  passwordHash String?
+  role         UserRole?
+  expiresAt    DateTime
+  attempts     Int       @default(0)
+  createdAt    DateTime  @default(now())
+
+  @@unique([email, purpose])
 }
 
 model Candidate {
@@ -69,7 +85,21 @@ model Candidate {
   noticePeriod    String?  // e.g. "60 Days" | "Immediate"
   preferredLocation String? // e.g. "Mumbai / Pune"
   workSettingPreference String? // "Remote" | "Hybrid" | "On-site"
+  education       String?  // Parsed highest / most relevant education line
+  summary         String?  // Short professional summary from CV
+  /// Spoken / written languages from CV
+  languages       String[] @default([])
+  /// Certifications, licenses, training (free text)
+  certifications  String?
+  /// Work history: roles, companies, dates (multi-line from parser)
+  employmentHistory String?
+  /// Notable projects or portfolio one-liners
+  projects        String?
   isReadyToJoin   Boolean  @default(true)
+  parseConfidence Float?   @default(0)
+  parseNeedsReview Boolean @default(false)
+  parseIssues     String[] @default([])
+  parseSourceFile String?
   
   createdAt       DateTime @default(now())
 }

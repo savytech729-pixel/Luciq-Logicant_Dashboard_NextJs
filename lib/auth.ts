@@ -1,8 +1,9 @@
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
 import { NextRequest } from 'next/server'
+import { env } from '@/lib/env'
 
-const SECRET_KEY = process.env.JWT_SECRET || 'super-secret-key-for-local-dev-only'
+const SECRET_KEY = env.JWT_SECRET
 const key = new TextEncoder().encode(SECRET_KEY)
 
 export async function encrypt(payload: any) {

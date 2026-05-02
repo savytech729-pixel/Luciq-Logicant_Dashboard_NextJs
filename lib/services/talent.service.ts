@@ -1,30 +1,116 @@
 import { prisma } from '@/lib/prisma'
-import { analyzeMatch } from '@/lib/ai'
+import { summarizeCandidateProfile } from '@/lib/ai'
+import { isLikelyObjectId, normalizeDocumentId } from '@/lib/mongodb-id'
+import { computeWeightedMatchScore, type MatchBreakdownRow } from '@/lib/match-score'
+
+type MatchBreakdown = MatchBreakdownRow
+
+/** Human-readable why / why-not from the same signals used for scoring (no extra LLM call). */
+export function explainCandidateJobMatch(opts: {
+  job: { title?: string; description?: string; requiredSkills?: string[]; experienceRequired?: number; location?: string; workSetting?: string; noticePeriod?: string }
+  candidate: { currentRole?: string; summary?: string; education?: string; preferredLocation?: string; workSettingPreference?: string; noticePeriod?: string }
+  breakdown: MatchBreakdown
+  matchedRequiredSkills: string[]
+  missingRequiredSkills: string[]
+  reqExp: number
+  canExp: number
+}): { strengths: string[]; gaps: string[] } {
+  const strengths: string[] = []
+  const gaps: string[] = []
+
+  const {
+    job,
+    candidate,
+    breakdown,
+    matchedRequiredSkills,
+    missingRequiredSkills,
+    reqExp,
+    canExp,
+  } = opts
+
+  const reqCount = (job.requiredSkills || []).length
+
+  if (reqCount > 0) {
+    if (matchedRequiredSkills.length > 0) {
+      strengths.push(
+        `Skills: matches ${matchedRequiredSkills.length}/${reqCount} required (${matchedRequiredSkills.slice(0, 8).join(', ')}${matchedRequiredSkills.length > 8 ? '…' : ''}).`
+      )
+    }
+    if (missingRequiredSkills.length > 0) {
+      gaps.push(
+        `Skills gap: missing or unclear vs job list — ${missingRequiredSkills.slice(0, 8).join(', ')}${missingRequiredSkills.length > 8 ? '…' : ''}.`
+      )
+    }
+  } else {
+    strengths.push('Job has no explicit skill list; score assumes general fit.')
+  }
+
+  if (reqExp > 0) {
+    if (canExp >= reqExp) {
+      strengths.push(`Experience: ${canExp} yrs meets the ${reqExp}+ yrs requirement.`)
+    } else if (canExp > 0) {
+      gaps.push(`Experience: profile shows ${canExp} yrs vs ${reqExp}+ yrs asked — may still fit seniority with adjacent roles.`)
+    } else {
+      gaps.push(`Experience: years not set on profile — compare CV to the ${reqExp}+ yrs bar manually.`)
+    }
+  } else {
+    strengths.push('No fixed experience floor on this vacancy.')
+  }
+
+  if (breakdown.roleAlignment >= 72) {
+    strengths.push('Role fit: current title/summary overlaps keywords from the job title.')
+  } else if (breakdown.roleAlignment < 48) {
+    gaps.push('Role fit: weak keyword overlap with the vacancy title — confirm domain fit in screening.')
+  }
+
+  if (breakdown.education >= 82) {
+    strengths.push('Education: aligns with degree hints in the job description.')
+  } else if (breakdown.education < 52) {
+    if (!(candidate.education || '').trim()) {
+      gaps.push('Education: not stored on profile — add if the role is qualification-sensitive.')
+    } else {
+      gaps.push('Education: may not match what the posting emphasizes — verify with hiring manager.')
+    }
+  }
+
+  if (breakdown.location >= 82) {
+    strengths.push('Location / work mode: compatible with the opening (site or remote/hybrid).')
+  } else if (breakdown.location < 52) {
+    gaps.push('Location / work setting: partial match — confirm relocation or hybrid expectations.')
+  }
+
+  if (breakdown.logistics >= 78) {
+    strengths.push('Joining: notice period looks workable for typical hiring timelines.')
+  } else if (breakdown.logistics < 55) {
+    gaps.push('Joining: notice unknown or long vs role urgency — validate dates early.')
+  }
+
+  if (strengths.length === 0) {
+    strengths.push('Baseline fit from weighted dimensions — review profile before deciding.')
+  }
+  if (gaps.length === 0) {
+    gaps.push('No major automated negatives; still validate culture and depth in interview.')
+  }
+
+  return { strengths, gaps }
+}
 
 export const talentService = {
   async getAllCandidates() {
-    // Falls back to raw find to handle extended fields without client crash
+    // Use Prisma so the list matches deletes and returns every candidate (raw find only returned firstBatch).
     try {
-      const result = await (prisma as any).$runCommandRaw({
-        find: 'Candidate',
-        sort: { createdAt: -1 }
-      })
-      const docs = (result as any)?.cursor?.firstBatch ?? []
-      
-      // Fetch users to map emails
+      const docs = await prisma.candidate.findMany({ orderBy: { createdAt: 'desc' } })
       const users = await prisma.user.findMany({
-        select: { id: true, email: true }
+        select: { id: true, email: true },
       })
-      const emailMap = users.reduce((acc: any, u: any) => {
+      const emailMap = users.reduce((acc: Record<string, string>, u) => {
         acc[u.id] = u.email
         return acc
       }, {})
 
-      return docs.map((c: any) => ({
-        id: c._id?.$oid ?? String(c._id),
+      return docs.map((c) => ({
         ...c,
-        email: emailMap[c.userId?.$oid ?? String(c.userId)],
-        createdAt: c.createdAt?.$date ?? c.createdAt
+        email: emailMap[c.userId] ?? '',
       }))
     } catch {
       return await prisma.candidate.findMany({ orderBy: { createdAt: 'desc' } })
@@ -67,10 +153,19 @@ export const talentService = {
         filter: { jobId: { $oid: jobId } }
       })
       const pipelineDocs = (pipelineResult as any)?.cursor?.firstBatch ?? []
-      statusMap = pipelineDocs.reduce((acc: any, doc: any) => {
-        acc[doc.candidateId?.$oid ?? String(doc.candidateId)] = doc.status
+      const latestByCandidate = pipelineDocs.reduce((acc: any, doc: any) => {
+        const candidateKey = doc.candidateId?.$oid ?? String(doc.candidateId)
+        const rawUpdated = doc.updatedAt?.$date ?? doc.updatedAt ?? doc.createdAt?.$date ?? doc.createdAt
+        const updatedAtMs = rawUpdated ? new Date(rawUpdated).getTime() : 0
+        const prev = acc[candidateKey]
+        if (!prev || updatedAtMs >= prev.updatedAtMs) {
+          acc[candidateKey] = { status: doc.status, updatedAtMs }
+        }
         return acc
       }, {})
+      statusMap = Object.fromEntries(
+        Object.entries(latestByCandidate).map(([candidateId, value]: [string, any]) => [candidateId, value.status])
+      )
     } catch (err) {
       console.warn('[matchCandidatesForJob] PipelineMatch collection missing or error:', err)
       // Graceful fallback: no statuses yet
@@ -79,66 +174,32 @@ export const talentService = {
     // 2. Fetch all Candidates
     const candidates = await this.getAllCandidates()
 
-    // 3. Multidimensional Scoring
     const scoredCandidates = candidates.map((candidate: any) => {
-      let skillScore = 0
-      let logisticsScore = 0
-      let locationScore = 0
-      let experienceScore = 0
+      const {
+        score,
+        breakdown: matchBreakdown,
+        matchedRequiredSkills,
+        missingRequiredSkills,
+        reqExp,
+        canExp,
+      } = computeWeightedMatchScore(job, candidate)
 
-      // A. Skill Match (50%)
-      const reqSkills = (job.requiredSkills || []).map((s: string) => s.toLowerCase())
-      const canSkills = (candidate.skills || []).map((s: string) => s.toLowerCase())
-      if (reqSkills.length > 0) {
-        const overlap = canSkills.filter((s: string) => reqSkills.includes(s)).length
-        skillScore = (overlap / reqSkills.length) * 100
-      } else {
-        skillScore = 100
-      }
-
-      // B. Logistics / Notice Period (20%)
-      const notice = (candidate.noticePeriod || '').toLowerCase()
-      const jobUrgency = (job.noticePeriod || '').toLowerCase()
-      
-      if (notice === 'immediate') logisticsScore = 100
-      else if (notice.includes('15')) logisticsScore = 80
-      else if (notice === jobUrgency) logisticsScore = 70
-      else if (notice.includes('30')) logisticsScore = 60
-      else logisticsScore = 40
-
-      // C. Location & Work Setting (15%)
-      const jobLoc = (job.location || '').toLowerCase()
-      const canLoc = (candidate.preferredLocation || '').toLowerCase()
-      const jobSetting = (job.workSetting || '').toLowerCase()
-      const canSetting = (candidate.workSettingPreference || '').toLowerCase()
-
-      if (jobSetting === 'remote' && canSetting === 'remote') locationScore = 100
-      else if (jobLoc && canLoc && jobLoc.includes(canLoc)) locationScore = 100
-      else if (jobSetting === canSetting) locationScore = 80
-      else locationScore = 50
-
-      // D. Experience (15%)
-      const reqExp = job.experienceRequired || 0
-      const canExp = candidate.totalExperience || candidate.experienceYears || 0
-      if (canExp >= reqExp) {
-        experienceScore = 100
-      } else {
-        experienceScore = (canExp / reqExp) * 100
-      }
-
-      // Weighted Total
-      const score = (skillScore * 0.5) + (logisticsScore * 0.2) + (locationScore * 0.15) + (experienceScore * 0.15)
+      const matchReasons = explainCandidateJobMatch({
+        job,
+        candidate,
+        breakdown: matchBreakdown,
+        matchedRequiredSkills,
+        missingRequiredSkills,
+        reqExp,
+        canExp,
+      })
 
       return {
         ...candidate,
-        score: Math.round(score),
+        score,
         pipelineStatus: statusMap[candidate.id] || 'REVEALED',
-        matchBreakdown: {
-          skills: Math.round(skillScore),
-          logistics: Math.round(logisticsScore),
-          location: Math.round(locationScore),
-          experience: Math.round(experienceScore)
-        }
+        matchBreakdown,
+        matchReasons,
       }
     })
 
@@ -152,58 +213,109 @@ export const talentService = {
   },
 
   async getCandidateById(id: string) {
+    if (!isLikelyObjectId(id)) return null
     try {
-      const result = await (prisma as any).$runCommandRaw({
+      let result = await (prisma as any).$runCommandRaw({
         find: 'Candidate',
         filter: { _id: { $oid: id } },
         limit: 1
       })
-      const docs = (result as any)?.cursor?.firstBatch ?? []
-      return docs[0] ? { ...docs[0], id: docs[0]._id?.$oid ?? String(docs[0]._id) } : null
+      let docs = (result as any)?.cursor?.firstBatch ?? []
+      if (!docs[0]) {
+        result = await (prisma as any).$runCommandRaw({
+          find: 'Candidate',
+          filter: { _id: id },
+          limit: 1
+        })
+        docs = (result as any)?.cursor?.firstBatch ?? []
+      }
+      const row = docs[0]
+      return row ? { ...row, id: normalizeDocumentId(row._id) } : null
     } catch {
       return await prisma.candidate.findUnique({ where: { id } })
     }
   },
 
   async getCandidateDetail(id: string) {
+    if (!isLikelyObjectId(id)) return null
     try {
-      const result = await (prisma as any).$runCommandRaw({
+      let result = await (prisma as any).$runCommandRaw({
         find: 'Candidate',
         filter: { _id: { $oid: id } },
         limit: 1
       })
-      const docs = (result as any)?.cursor?.firstBatch ?? []
+      let docs = (result as any)?.cursor?.firstBatch ?? []
+      if (!docs[0]) {
+        result = await (prisma as any).$runCommandRaw({
+          find: 'Candidate',
+          filter: { _id: id },
+          limit: 1
+        })
+        docs = (result as any)?.cursor?.firstBatch ?? []
+      }
       const candidate = docs[0]
 
       if (!candidate) return null
 
-      // Get user email
-      const userResult = await (prisma as any).$runCommandRaw({
-        find: 'User',
-        filter: { _id: candidate.userId },
-        limit: 1
-      })
-      const user = (userResult as any)?.cursor?.firstBatch?.[0]
-
-      const candidateData = {
-        ...candidate,
-        id: candidate._id?.$oid ?? String(candidate._id),
-        user: { email: user?.email || 'Unknown' }
+      const userIdStr = normalizeDocumentId(candidate.userId)
+      let user: { email?: string } | null = null
+      if (userIdStr && isLikelyObjectId(userIdStr)) {
+        const userResult = await (prisma as any).$runCommandRaw({
+          find: 'User',
+          filter: { _id: { $oid: userIdStr } },
+          limit: 1
+        })
+        user = (userResult as any)?.cursor?.firstBatch?.[0] ?? null
+      }
+      if (!user?.email && userIdStr) {
+        try {
+          user = await prisma.user.findUnique({
+            where: { id: userIdStr },
+            select: { email: true },
+          })
+        } catch {
+          /* ignore */
+        }
       }
 
-      // Proactive Intelligence via AI
-      const skillsArr = Array.isArray(candidate.skills) ? candidate.skills : (typeof candidate.skills === 'string' ? candidate.skills.split(',').map((s: string) => s.trim()) : []);
-      const analysis = await analyzeMatch(candidateData, { title: candidateData.currentRole, requiredSkills: skillsArr })
-      
-      const aiSummary = analysis ? [
-        `AI Verified trajectory: ${analysis.reasoning}`,
-        `Strengths: ${analysis.strengths.join(', ')}`,
-        `Gaps to address: ${analysis.gaps.join(', ')}`,
-        `Technical depth: High confidence in ${skillsArr.slice(0, 3).join(', ')}.`
-      ] : [
-        `Experience: ${candidate.totalExperience || 'N/A'} Years.`,
-        `Primary Role: ${candidate.currentRole}.`
-      ]
+      const contactEmail = (user?.email || '').trim()
+      const candidateData = {
+        ...candidate,
+        id: normalizeDocumentId(candidate._id),
+        email: contactEmail,
+        user: { email: contactEmail || 'Not linked' },
+      }
+
+      const skillsArr = Array.isArray(candidate.skills)
+        ? candidate.skills
+        : typeof candidate.skills === 'string'
+          ? candidate.skills.split(',').map((s: string) => s.trim()).filter(Boolean)
+          : []
+
+      let aiSummary: string[] = []
+      try {
+        aiSummary = await summarizeCandidateProfile({
+          name: candidateData.name,
+          currentRole: candidateData.currentRole,
+          totalExperience: candidateData.totalExperience,
+          experienceYears: candidateData.experienceYears,
+          skills: skillsArr,
+          education: candidateData.education,
+          summary: candidateData.summary,
+          preferredLocation: candidateData.preferredLocation,
+          expectedSalary: candidateData.expectedSalary,
+          noticePeriod: candidateData.noticePeriod,
+          phone: candidateData.phone,
+        })
+      } catch (summarizeErr) {
+        console.warn('[getCandidateDetail] summarizeCandidateProfile failed', summarizeErr)
+        aiSummary = [
+          `${candidateData.name || 'Candidate'} · ${candidateData.currentRole || 'Role unknown'}`,
+          skillsArr.length ? `Skills: ${skillsArr.slice(0, 12).join(', ')}` : 'Skills not captured.',
+          `${candidateData.education || 'Education N/A'} · ${candidateData.preferredLocation || 'Location N/A'}`,
+          candidateData.summary ? String(candidateData.summary).slice(0, 320) : 'Open CV Data tab for parsed fields.',
+        ]
+      }
 
       return { candidate: candidateData, aiSummary }
     } catch (err: any) {

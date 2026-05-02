@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { ArrowLeft, Save, UploadCloud, FileText, BrainCircuit, CheckCircle2 } from 'lucide-react'
+import { PageHero, SurfaceCard } from '@/components/dashboard/Premium'
 
 import { useCandidate } from '@/lib/hooks/useCandidate'
 
@@ -30,9 +31,15 @@ export default function CandidateProfile() {
     profilePic: '',
     salarySlipUrl: '',
     offerLetterUrl: '',
-    terminationLetterUrl: ''
+    terminationLetterUrl: '',
+    education: '',
+    summary: '',
+    certifications: '',
+    employmentHistory: '',
+    projects: '',
   })
   const [skillInput, setSkillInput] = useState('')
+  const [languageInput, setLanguageInput] = useState('')
 
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -53,9 +60,19 @@ export default function CandidateProfile() {
         profilePic: candidate.profilePic || '',
         salarySlipUrl: candidate.salarySlipUrl || '',
         offerLetterUrl: candidate.offerLetterUrl || '',
-        terminationLetterUrl: candidate.terminationLetterUrl || ''
+        terminationLetterUrl: candidate.terminationLetterUrl || '',
+        education: candidate.education || '',
+        summary: candidate.summary || '',
+        certifications: candidate.certifications || '',
+        employmentHistory: candidate.employmentHistory || '',
+        projects: candidate.projects || '',
       })
       setSkillInput(Array.isArray(candidate.skills) ? candidate.skills.join(', ') : '')
+      setLanguageInput(
+        Array.isArray(candidate.languages) && candidate.languages.length
+          ? candidate.languages.join(', ')
+          : ''
+      )
     }
   }, [candidate])
 
@@ -72,10 +89,23 @@ export default function CandidateProfile() {
     const analyze = async () => {
       try {
         setParseStep(2) // Reading Vectors
+        const reader = new FileReader()
+        const fileData = await new Promise<{ base64: string, mimeType: string }>((resolve) => {
+          reader.onload = (ev) => {
+            const out = String(ev.target?.result || '')
+            const [header, base64] = out.split(';base64,')
+            resolve({
+              base64,
+              mimeType: header.split(':')[1] || 'application/pdf',
+            })
+          }
+          reader.readAsDataURL(file)
+        })
+
         const res = await fetch('/api/admin/candidates/screen', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileName: file.name, fileSize: file.size })
+          body: JSON.stringify({ fileName: file.name, fileSize: file.size, fileData })
         })
         const data = await res.json()
         
@@ -95,9 +125,19 @@ export default function CandidateProfile() {
           noticePeriod: data.candidate.noticePeriod || 'Immediate',
           expectedSalary: data.candidate.expectedSalary || '',
           workSettingPreference: data.candidate.workSettingPreference || 'Remote',
-          linkedInUrl: data.candidate.linkedInUrl || ''
+          linkedInUrl: data.candidate.linkedInUrl || '',
+          education: data.candidate.education || '',
+          summary: data.candidate.summary || '',
+          certifications: data.candidate.certifications || '',
+          employmentHistory: data.candidate.employmentHistory || '',
+          projects: data.candidate.projects || '',
         }))
         setSkillInput(Array.isArray(data.candidate.skills) ? data.candidate.skills.join(', ') : '')
+        setLanguageInput(
+          Array.isArray(data.candidate.languages) && data.candidate.languages.length
+            ? data.candidate.languages.join(', ')
+            : ''
+        )
         
         setParseStep(4) // Complete
         setTimeout(() => setIsParsing(false), 1000)
@@ -116,10 +156,13 @@ export default function CandidateProfile() {
     
     // Convert comma string to array
     const skillList = skillInput.split(',').map(s => s.trim()).filter(s => s)
-    
+    const langList = languageInput.split(/[,;]/).map(s => s.trim()).filter(s => s)
+
     const success = await updateProfile({
       ...formData,
-      skills: skillList
+      skills: skillList,
+      languages: langList,
+      totalExperience: formData.experienceYears,
     })
     
     if (success) {
@@ -137,13 +180,12 @@ export default function CandidateProfile() {
             <ArrowLeft className="h-4 w-4 text-white" />
           </button>
         </Link>
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-white mb-1">Personal Profile</h1>
-          <p className="text-slate-400">Manage your basic identity and contact information.</p>
+        <div className="flex-1">
+          <PageHero title="Personal Profile" description="Manage your identity, CV-derived details, and recruiter-facing profile quality." />
         </div>
       </div>
 
-      <Card className="glass-card overflow-hidden">
+      <SurfaceCard className="p-0 overflow-hidden">
         <form onSubmit={onSubmit}>
           <CardHeader className="bg-white/[0.02] border-b border-white/5 pb-4">
             <CardTitle className="text-xl text-white">Identity Details</CardTitle>
@@ -235,6 +277,93 @@ export default function CandidateProfile() {
                 />
               </div>
             </div>
+
+            <div className="border-t border-white/10 pt-8 mt-2 space-y-6">
+              <div>
+                <Label className="text-slate-300">Skills (comma-separated)</Label>
+                <input
+                  value={skillInput}
+                  onChange={(e) => setSkillInput(e.target.value)}
+                  placeholder="React, Node.js, AWS…"
+                  className="mt-2 w-full bg-white/[0.02] border border-white/10 focus:border-blue-500 text-white min-h-12 px-4 rounded-xl outline-none transition-colors"
+                />
+              </div>
+              <div>
+                <Label className="text-slate-300">Languages (comma-separated)</Label>
+                <input
+                  value={languageInput}
+                  onChange={(e) => setLanguageInput(e.target.value)}
+                  placeholder="English, Hindi…"
+                  className="mt-2 w-full bg-white/[0.02] border border-white/10 focus:border-blue-500 text-white min-h-12 px-4 rounded-xl outline-none transition-colors"
+                />
+              </div>
+              <div>
+                <Label className="text-slate-300">Education</Label>
+                <textarea
+                  value={formData.education}
+                  onChange={(e) => setFormData({ ...formData, education: e.target.value })}
+                  rows={3}
+                  className="mt-2 w-full bg-white/[0.02] border border-white/10 focus:border-blue-500 text-white px-4 py-3 rounded-xl outline-none transition-colors resize-y min-h-[80px]"
+                  placeholder="Degree, institution, year"
+                />
+              </div>
+              <div>
+                <Label className="text-slate-300">Work experience (from CV)</Label>
+                <textarea
+                  value={formData.employmentHistory}
+                  onChange={(e) => setFormData({ ...formData, employmentHistory: e.target.value })}
+                  rows={6}
+                  className="mt-2 w-full bg-white/[0.02] border border-white/10 focus:border-blue-500 text-white px-4 py-3 rounded-xl outline-none transition-colors resize-y min-h-[120px] font-mono text-sm"
+                  placeholder="Company | Role | Dates — one block per job"
+                />
+              </div>
+              <div>
+                <Label className="text-slate-300">Certifications & training</Label>
+                <textarea
+                  value={formData.certifications}
+                  onChange={(e) => setFormData({ ...formData, certifications: e.target.value })}
+                  rows={3}
+                  className="mt-2 w-full bg-white/[0.02] border border-white/10 focus:border-blue-500 text-white px-4 py-3 rounded-xl outline-none transition-colors resize-y"
+                />
+              </div>
+              <div>
+                <Label className="text-slate-300">Projects & highlights</Label>
+                <textarea
+                  value={formData.projects}
+                  onChange={(e) => setFormData({ ...formData, projects: e.target.value })}
+                  rows={3}
+                  className="mt-2 w-full bg-white/[0.02] border border-white/10 focus:border-blue-500 text-white px-4 py-3 rounded-xl outline-none transition-colors resize-y"
+                />
+              </div>
+              <div>
+                <Label className="text-slate-300">Professional summary</Label>
+                <textarea
+                  value={formData.summary}
+                  onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
+                  rows={4}
+                  className="mt-2 w-full bg-white/[0.02] border border-white/10 focus:border-blue-500 text-white px-4 py-3 rounded-xl outline-none transition-colors resize-y"
+                />
+              </div>
+            </div>
+
+            <div className="border-t border-white/10 pt-8 mt-4">
+              <Label className="text-slate-300 flex items-center gap-2">
+                <UploadCloud className="w-4 h-4 text-blue-400" /> Re-parse CV (updates fields above)
+              </Label>
+              <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={handleFileUpload} />
+              <button
+                type="button"
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleFileUpload}
+                onClick={() => fileInputRef.current?.click()}
+                className={`mt-3 w-full rounded-xl border-2 border-dashed py-10 text-sm transition-colors ${
+                  isDragging ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-white/15 text-slate-400 hover:border-white/25'
+                }`}
+              >
+                Drop a CV here or click to upload
+              </button>
+            </div>
           </CardContent>
           <div className="border-t border-white/5 bg-white/[0.01] p-6 flex justify-end">
              <button type="submit" disabled={isUpdating} className="btn-primary w-full sm:w-auto">
@@ -242,7 +371,22 @@ export default function CandidateProfile() {
             </button>
           </div>
         </form>
-      </Card>
+      </SurfaceCard>
+
+      <AnimatePresence>
+        {isParsing && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm px-6"
+          >
+            <BrainCircuit className="w-10 h-10 text-blue-400 animate-pulse mb-4" />
+            <p className="text-white font-semibold text-center">Extracting fields from your CV…</p>
+            <p className="text-slate-400 text-sm mt-2">Step {parseStep} of 4</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
 
   )

@@ -47,38 +47,82 @@ export const candidateService = {
   async updateProfile(userId: string, data: any) {
     const candidate = await this.getProfileByUserId(userId)
     const now = new Date().toISOString()
-    
-    // Flatten data and clean numeric fields
-    const updateData = {
-      ...data,
-      totalExperience: parseFloat(data.totalExperience || data.experienceYears) || 0,
-      experienceYears: Math.floor(parseFloat(data.totalExperience || data.experienceYears) || 0),
-      updatedAt: { $date: now }
+
+    const exp = parseFloat(String(data.totalExperience ?? data.experienceYears ?? 0)) || 0
+    const skillsArr = Array.isArray(data.skills)
+      ? data.skills.map((s: string) => String(s).trim()).filter(Boolean)
+      : String(data.skills || '')
+          .split(',')
+          .map((s: string) => s.trim())
+          .filter(Boolean)
+
+    const langArr = Array.isArray(data.languages)
+      ? data.languages.map((s: string) => String(s).trim()).filter(Boolean)
+      : typeof data.languages === 'string'
+        ? data.languages.split(/[,;]/).map((s: string) => s.trim()).filter(Boolean)
+        : undefined
+
+    const $set: Record<string, unknown> = {
+      totalExperience: exp,
+      experienceYears: Math.floor(exp),
+      skills: skillsArr,
+      updatedAt: { $date: now },
     }
+
+    const put = (key: string, val: unknown) => {
+      if (val === undefined) return
+      $set[key] = val
+    }
+
+    put('name', data.name)
+    put('currentRole', data.currentRole)
+    put('phone', data.phone)
+    put('education', data.education)
+    put('summary', data.summary)
+    put('currentSalary', data.currentSalary)
+    put('expectedSalary', data.expectedSalary)
+    put('noticePeriod', data.noticePeriod)
+    put('preferredLocation', data.preferredLocation)
+    put('workSettingPreference', data.workSettingPreference)
+    put('isReadyToJoin', data.isReadyToJoin)
+    put('linkedInUrl', data.linkedInUrl)
+    put('profilePic', data.profilePic)
+    put('cvUrl', data.cvUrl)
+    put('salarySlipUrl', data.salarySlipUrl)
+    put('offerLetterUrl', data.offerLetterUrl)
+    put('terminationLetterUrl', data.terminationLetterUrl)
+    put('certifications', data.certifications)
+    put('employmentHistory', data.employmentHistory)
+    put('projects', data.projects)
+    if (langArr !== undefined) $set.languages = langArr
 
     if (!candidate) {
-      const result = await (prisma as any).$runCommandRaw({
+      await (prisma as any).$runCommandRaw({
         insert: 'Candidate',
-        documents: [{
-          userId: { $oid: userId },
-          name: data.name || 'Unknown',
-          currentRole: data.currentRole || 'Talent',
-          isReadyToJoin: true,
-          createdAt: { $date: now },
-          ...updateData
-        }]
+        documents: [
+          {
+            userId: { $oid: userId },
+            name: data.name || 'Unknown',
+            currentRole: data.currentRole || 'Talent',
+            isReadyToJoin: data.isReadyToJoin ?? true,
+            createdAt: { $date: now },
+            ...$set,
+          },
+        ],
       })
-      return result
+      return { ok: true }
     }
 
-    const result = await (prisma as any).$runCommandRaw({
+    await (prisma as any).$runCommandRaw({
       update: 'Candidate',
-      updates: [{
-        q: { _id: { $oid: candidate.id } },
-        u: { $set: updateData }
-      }]
+      updates: [
+        {
+          q: { _id: { $oid: candidate.id } },
+          u: { $set },
+        },
+      ],
     })
-    return result
+    return { ok: true }
   },
 
   async getAvailableJobs(userId: string) {

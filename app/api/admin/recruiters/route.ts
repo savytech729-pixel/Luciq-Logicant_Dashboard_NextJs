@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { hash } from 'bcryptjs'
+import { sendEmail } from '@/lib/email/smtp'
+import { recruiterWelcomeTemplate } from '@/lib/email/templates'
 
 // GET /api/admin/recruiters
 export async function GET() {
@@ -104,6 +106,7 @@ export async function POST(req: Request) {
         email,
         password: hashedPassword,
         role: 'RECRUITER',
+        emailVerified: false,
         createdAt: { $date: now },
       }],
     })
@@ -121,6 +124,9 @@ export async function POST(req: Request) {
         createdAt: { $date: now },
       }],
     })
+
+    const welcome = recruiterWelcomeTemplate(email)
+    await sendEmail({ to: email, subject: welcome.subject, html: welcome.html, text: welcome.text }).catch(() => null)
 
     return NextResponse.json({
       message: 'Recruiter created successfully',
