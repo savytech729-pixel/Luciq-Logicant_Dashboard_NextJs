@@ -16,10 +16,12 @@ export async function POST(req: Request) {
     const address = asTrimmedString(body.address)
     const designation = asTrimmedString(body.designation)
     const department = asTrimmedString(body.department)
-    const role = asTrimmedString(body.role).toUpperCase()
+    const roleFromBody = asTrimmedString(body.role).toUpperCase()
+    const sessionRole = asTrimmedString(session.role).toUpperCase()
+    const role = roleFromBody === 'CANDIDATE' || roleFromBody === 'ADMIN' ? roleFromBody : sessionRole
     const isFresher = Boolean(body.isFresher)
 
-    if (!name || !role || (role !== 'CANDIDATE' && role !== 'ADMIN')) {
+    if (!name || (role !== 'CANDIDATE' && role !== 'ADMIN')) {
       return NextResponse.json({ error: 'Invalid onboarding payload' }, { status: 400 })
     }
 

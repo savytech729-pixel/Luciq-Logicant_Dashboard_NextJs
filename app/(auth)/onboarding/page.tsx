@@ -11,6 +11,7 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(1)
   const [isFresher, setIsFresher] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -39,6 +40,7 @@ export default function OnboardingPage() {
 
   const onSubmit = async () => {
     setIsLoading(true)
+    setError('')
     try {
       const res = await fetch('/api/auth/onboarding', {
         method: 'POST',
@@ -46,7 +48,7 @@ export default function OnboardingPage() {
         body: JSON.stringify({
           ...formData,
           isFresher,
-          role: session?.user?.role
+          role: session?.role
         }),
       })
 
@@ -57,9 +59,13 @@ export default function OnboardingPage() {
         } else {
           router.push('/candidate/dashboard')
         }
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setError(data?.error || 'Could not finish onboarding. Please try again.')
       }
     } catch (err) {
       console.error(err)
+      setError('Could not finish onboarding. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -248,6 +254,9 @@ export default function OnboardingPage() {
                         {isLoading ? 'Finalizing...' : <><CheckCircle2 className="w-4 h-4 mr-2 inline" /> Finish Onboarding</>}
                       </button>
                    </div>
+                   {error ? (
+                     <p className="text-xs text-rose-400 text-center -mt-3">{error}</p>
+                   ) : null}
                 </motion.div>
               )}
             </AnimatePresence>
