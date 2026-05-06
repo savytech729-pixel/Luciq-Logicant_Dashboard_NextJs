@@ -1,18 +1,52 @@
 const REQUIRED_ENV_VARS = ["DATABASE_URL", "JWT_SECRET", "GEMINI_API_KEY"] as const;
 
-type RequiredEnvVar = (typeof REQUIRED_ENV_VARS)[number];
+type RequiredEnvVar = (typeof REQUIRED_ENV_VARS)[number]
+
+/**
+ * During `next build`, Next evaluates server route modules (e.g. Prisma + env) without
+ * every production secret (unless each var is enabled for "Build" on Vercel). Use
+ * placeholders only in this phase so the bundle can be produced; real requests still
+ * need actual env vars at runtime.
+ *
+ * Note: Turbopack / "Collecting page data" often loads routes without setting
+ * `NEXT_PHASE=phase-production-build`, so we also key off the package lifecycle and argv.
+ */
+function useBuildTimeEnvPlaceholders(): boolean {
+  if (process.env.SKIP_ENV_VALIDATION === "1") return true
+
+  const phase = process.env.NEXT_PHASE
+  if (phase === "phase-production-build" || phase === "phase-development-build") return true
+  if (phase?.startsWith?.("phase-production-")) return true
+
+  // `pnpm run build` / `npm run build` — present on Vercel install + build steps
+  if (process.env.npm_lifecycle_event === "build") return true
+
+  // Fallback when lifecycle is missing (some CI / nested Next invocations)
+  const argv = process.argv
+  if (
+    argv.includes("build") &&
+    argv.some((a) => typeof a === "string" && (a.includes("next") || /next(\.js)?$/.test(a)))
+  ) {
+    return true
+  }
+
+  return false
+}
 
 function readEnv(name: RequiredEnvVar): string {
-  const value = process.env[name];
+  const value = process.env[name]
   if (!value || value.trim().length === 0) {
-    throw new Error(`Missing required environment variable: ${name}`);
+    if (useBuildTimeEnvPlaceholders()) {
+      return `__NEXT_BUILD_PLACEHOLDER_${name}__`
+    }
+    throw new Error(`Missing required environment variable: ${name}`)
   }
-  return value;
+  return value
 }
 
 export function assertRequiredEnv() {
   for (const envVar of REQUIRED_ENV_VARS) {
-    readEnv(envVar);
+    readEnv(envVar)
   }
 }
 
