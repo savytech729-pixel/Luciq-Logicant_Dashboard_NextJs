@@ -1,22 +1,40 @@
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
-import { NextRequest } from 'next/server'
-import { env } from '@/lib/env'
+import { useBuildTimeEnvPlaceholders } from '@/lib/env-phase'
 
-const SECRET_KEY = env.JWT_SECRET
-const key = new TextEncoder().encode(SECRET_KEY)
+/** Avoid importing `lib/env` here — that loads DATABASE_URL/GEMINI at module init and breaks every page via `proxy.ts` if anything is missing on Vercel. */
+function jwtSigningKey(): Uint8Array {
+  const raw = process.env.JWT_SECRET?.trim()
+  if (raw) return new TextEncoder().encode(raw)
+  if (useBuildTimeEnvPlaceholders()) {
+    return new TextEncoder().encode('__NEXT_BUILD_PLACEHOLDER_JWT_SECRET__')
+  }
+  // Runtime without secret: verification fails → decrypt returns null; login must set JWT_SECRET
+  return new TextEncoder().encode('')
+}
 
 export async function encrypt(payload: any) {
+  const secret = process.env.JWT_SECRET?.trim()
+  if (!secret?.length) {
+    if (useBuildTimeEnvPlaceholders()) {
+      return await new SignJWT(payload)
+        .setProtectedHeader({ alg: 'HS256' })
+        .setIssuedAt()
+        .setExpirationTime('24h')
+        .sign(jwtSigningKey())
+    }
+    throw new Error('JWT_SECRET is not configured')
+  }
   return await new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('24h')
-    .sign(key)
+    .sign(new TextEncoder().encode(secret))
 }
 
 export async function decrypt(token: string): Promise<any> {
   try {
-    const { payload } = await jwtVerify(token, key, {
+    const { payload } = await jwtVerify(token, jwtSigningKey(), {
       algorithms: ['HS256'],
     })
     return payload
