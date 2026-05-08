@@ -10,6 +10,14 @@ type SendEmailInput = {
 
 export async function sendEmail(input: SendEmailInput) {
   const recipients = (Array.isArray(input.to) ? input.to : [input.to]).map((email) => ({ email }));
+  const fromEmail = String(env.BREVO_FROM_EMAIL || "").trim().toLowerCase();
+  if (fromEmail.endsWith("@smtp-brevo.com")) {
+    return {
+      sent: false,
+      reason:
+        "BREVO_FROM_EMAIL is invalid. Use a verified sender/domain email (not @smtp-brevo.com).",
+    };
+  }
   const smtpConfigured =
     !!env.BREVO_SMTP_HOST &&
     Number.isFinite(env.BREVO_SMTP_PORT) &&

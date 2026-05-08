@@ -84,6 +84,11 @@ export default function CandidateJobsPage() {
     const fetchJobs = async () => {
       const data = await getJobs()
       setJobs(data)
+      const appliedMap: Record<string, boolean> = {}
+      for (const job of data || []) {
+        if (job?.hasApplied) appliedMap[String(job.id)] = true
+      }
+      setAppliedJobs(appliedMap)
       setLoading(false)
     }
     fetchJobs()

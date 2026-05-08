@@ -1214,12 +1214,110 @@ export async function generateScreeningQuestions(job: any) {
         return null;
       }
     },
-    () => [
-      "Tell us about your experience in a similar role.",
-      "What is your biggest technical challenge so far?",
-      "Why do you want to join our team?",
-    ]
+    () => {
+      const role = String(job?.title || "this role").trim();
+      const skills = Array.isArray(job?.requiredSkills)
+        ? job.requiredSkills.map((s: unknown) => String(s).trim()).filter(Boolean)
+        : String(job?.requiredSkills || "")
+            .split(",")
+            .map((s: string) => s.trim())
+            .filter(Boolean);
+      const skillA = skills[0] || "the core stack";
+      const skillB = skills[1] || "delivery planning";
+      const skillC = skills[2] || "stakeholder communication";
+      const exp = Number(job?.experienceRequired || 0);
+      const expText = Number.isFinite(exp) && exp > 0 ? `${exp}+ years` : "the required seniority";
+
+      return [
+        `For ${role}, describe one high-stakes project you led with ${skillA}. What trade-offs did you make and what was the measurable outcome?`,
+        `Assume scope increases by 30% mid-cycle. How would you re-plan timeline, resources, and risk controls while maintaining quality using ${skillB}?`,
+        `Given this role expects ${expText}, which weekly metrics and escalation signals would you track to keep delivery and stakeholder confidence on track (including ${skillC})?`,
+      ];
+    }
   );
+}
+
+/**
+ * Personalized screening questions:
+ * - grounded in vacancy
+ * - adapted to candidate profile
+ * - avoids repeating previously asked questions
+ */
+export async function generatePersonalizedScreeningQuestions(input: {
+  job: any
+  candidateProfile?: {
+    name?: string
+    currentRole?: string
+    totalExperience?: string | number
+    skills?: string[] | string
+    preferredLocation?: string
+  }
+  previouslyAsked?: string[]
+}) {
+  const skills = Array.isArray(input.candidateProfile?.skills)
+    ? input.candidateProfile?.skills
+    : String(input.candidateProfile?.skills || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+  const previouslyAsked = (input.previouslyAsked || []).map((q) => String(q).trim()).filter(Boolean).slice(0, 20)
+
+  const prompt = `
+You are an expert recruiter creating a pre-apply screening questionnaire.
+
+Generate 3 practical questions for this vacancy:
+- Role: ${input.job?.title || 'Unknown'}
+- Description: ${input.job?.description || 'N/A'}
+- Required skills: ${Array.isArray(input.job?.requiredSkills) ? input.job.requiredSkills.join(', ') : String(input.job?.requiredSkills || '')}
+
+Candidate context:
+- Current role: ${input.candidateProfile?.currentRole || 'Not shared'}
+- Experience: ${String(input.candidateProfile?.totalExperience || 'Not shared')}
+- Skills: ${skills.join(', ') || 'Not shared'}
+- Preferred location: ${input.candidateProfile?.preferredLocation || 'Not shared'}
+
+Questions already asked earlier for this candidate on this vacancy (DO NOT repeat or trivially rephrase):
+${previouslyAsked.length ? previouslyAsked.map((q, i) => `${i + 1}. ${q}`).join('\n') : 'None'}
+
+Rules:
+- Ask exactly 3 questions.
+- Make them role-relevant and skill-depth oriented.
+- Avoid generic HR-only questions.
+- Keep each question <= 160 characters.
+
+Return ONLY a JSON array of 3 strings.
+`
+
+  return runWithBudgetAndCache(
+    'generatePersonalizedScreeningQuestions',
+    { input, mode: env.AI_BUDGET_MODE },
+    async () => {
+      const model = genAI.getGenerativeModel({ model: AI_MODELS.FLASH })
+      try {
+        const result = await model.generateContent(prompt)
+        const response = await result.response
+        const text = response.text()
+        const parsed = parseJsonArray(text)
+        if (!Array.isArray(parsed)) return null
+        const clean = parsed.map((q: unknown) => String(q || '').trim()).filter(Boolean).slice(0, 3)
+        return clean.length === 3 ? clean : null
+      } catch (err) {
+        console.error('AI Personalized Question Generation Error:', err)
+        return null
+      }
+    },
+    () => {
+      const role = input.job?.title || 'this role'
+      const topSkill = Array.isArray(input.job?.requiredSkills) && input.job.requiredSkills.length
+        ? String(input.job.requiredSkills[0])
+        : 'the required stack'
+      return [
+        `Describe a recent project where you solved a real problem in ${role}. What was your exact contribution?`,
+        `How have you used ${topSkill} in production, and what trade-offs did you make?`,
+        `If selected, what details can you share on notice period, compensation expectations, and start timeline?`,
+      ]
+    }
+  )
 }
 
 

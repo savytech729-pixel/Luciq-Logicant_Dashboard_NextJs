@@ -43,6 +43,7 @@ export default function CandidateProfile() {
 
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const profilePhotoInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (candidate) {
@@ -172,6 +173,24 @@ export default function CandidateProfile() {
 
   if (loading) return null
 
+  const handleProfilePhotoUpload = (file?: File | null) => {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file (JPG, PNG, WEBP).')
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Profile photo should be under 2MB.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const dataUrl = String(ev.target?.result || '')
+      setFormData((prev) => ({ ...prev, profilePic: dataUrl }))
+    }
+    reader.readAsDataURL(file)
+  }
+
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20">
       <div className="flex items-center space-x-4">
@@ -212,6 +231,42 @@ export default function CandidateProfile() {
                   className="w-full bg-white/[0.02] border border-white/10 focus:border-blue-500 text-white h-12 px-4 rounded-xl outline-none transition-colors" 
                 />
               </div>
+            </div>
+
+            <div className="space-y-3 rounded-xl border border-white/10 bg-white/[0.02] p-4">
+              <Label className="text-slate-300">Profile Picture</Label>
+              <input
+                id="candidate-profile-photo-upload"
+                ref={profilePhotoInputRef}
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp"
+                className="block w-full text-sm text-slate-300 file:mr-3 file:rounded-lg file:border file:border-white/10 file:bg-white/[0.03] file:px-3 file:py-2 file:text-white file:cursor-pointer cursor-pointer"
+                onChange={(e) => handleProfilePhotoUpload(e.target.files?.[0])}
+              />
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 rounded-full overflow-hidden border border-white/10 bg-white/[0.03] flex items-center justify-center">
+                  {formData.profilePic ? (
+                    <img src={formData.profilePic} alt="Profile preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-[10px] text-slate-500">No Photo</span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <span className="px-3 py-2 rounded-lg border border-white/10 bg-white/[0.03] text-sm text-white">
+                    Select file above
+                  </span>
+                  {formData.profilePic ? (
+                    <button
+                      type="button"
+                      onClick={() => setFormData((prev) => ({ ...prev, profilePic: '' }))}
+                      className="px-3 py-2 rounded-lg border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-sm text-red-300 transition-colors"
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+              <p className="text-xs text-slate-500">JPG/PNG/WEBP, max 2MB.</p>
             </div>
             
             <div className="space-y-2">

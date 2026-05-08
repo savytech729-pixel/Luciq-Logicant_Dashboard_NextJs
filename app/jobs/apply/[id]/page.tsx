@@ -20,6 +20,10 @@ export default function DirectApplyPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [questionsLoading, setQuestionsLoading] = useState(false)
+  const [questionsError, setQuestionsError] = useState('')
+  const [questions, setQuestions] = useState<string[]>([])
+  const [answers, setAnswers] = useState<Record<string, string>>({})
 
   const [form, setForm] = useState({
     name: '',
@@ -54,12 +58,21 @@ export default function DirectApplyPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (questions.length === 0) {
+      await fetchQuestions()
+      return
+    }
+    const qa = questions.map((q) => ({ question: q, answer: (answers[q] || '').trim() }))
+    if (qa.some((x) => !x.answer)) {
+      setQuestionsError('Please answer all screening questions before submitting.')
+      return
+    }
     setSubmitting(true)
     try {
       const res = await fetch('/api/public/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, jobId })
+        body: JSON.stringify({ ...form, jobId, questionnaireAnswers: qa })
       })
       const data = await res.json()
       if (res.ok) {
@@ -72,6 +85,35 @@ export default function DirectApplyPage() {
       console.error(err)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const fetchQuestions = async () => {
+    setQuestionsLoading(true)
+    setQuestionsError('')
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/questions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: form.email,
+          name: form.name,
+          currentRole: form.currentRole,
+          totalExperience: form.totalExperience,
+          skills: form.skills,
+          preferredLocation: form.preferredLocation,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Could not generate questionnaire')
+      const qs = Array.isArray(data.questions) ? data.questions.map((q: unknown) => String(q).trim()).filter(Boolean) : []
+      if (qs.length === 0) throw new Error('No screening questions generated')
+      setQuestions(qs)
+      setAnswers({})
+    } catch (err: unknown) {
+      setQuestionsError(err instanceof Error ? err.message : 'Could not load questions.')
+    } finally {
+      setQuestionsLoading(false)
     }
   }
 
@@ -188,6 +230,50 @@ export default function DirectApplyPage() {
                         <p className="text-xs text-slate-500 mt-1">Our AI will parse this document instantly upon submission.</p>
                      </div>
                   </div>
+
+                  {/* Section 5: Dynamic Screening */}
+                  <Section title="AI Screening Questionnaire" icon={<BrainCircuit className="w-4 h-4" />}>
+                     <div className="space-y-3">
+                        {questions.length === 0 ? (
+                          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                            <p className="text-sm text-slate-300">Generate personalized questions for this vacancy before final submit.</p>
+                            <button
+                              type="button"
+                              onClick={fetchQuestions}
+                              disabled={questionsLoading || !form.email || !form.currentRole}
+                              className="mt-3 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold disabled:opacity-50"
+                            >
+                              {questionsLoading ? 'Generating…' : 'Generate Questions'}
+                            </button>
+                            <p className="text-[10px] text-slate-500 mt-2">Tip: fill Email + Target Role first for better personalization.</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {questions.map((q, idx) => (
+                              <div key={q} className="space-y-1.5">
+                                <p className="text-xs font-bold text-slate-200">{idx + 1}. {q}</p>
+                                <textarea
+                                  rows={3}
+                                  value={answers[q] || ''}
+                                  onChange={(e) => setAnswers((prev) => ({ ...prev, [q]: e.target.value }))}
+                                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-colors resize-y"
+                                  placeholder="Write your answer..."
+                                />
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={fetchQuestions}
+                              disabled={questionsLoading}
+                              className="text-xs text-blue-400 hover:text-blue-300"
+                            >
+                              {questionsLoading ? 'Refreshing…' : 'Regenerate new questionnaire'}
+                            </button>
+                          </div>
+                        )}
+                        {questionsError ? <p className="text-xs text-red-400">{questionsError}</p> : null}
+                     </div>
+                  </Section>
 
                   {/* Submit Action */}
                   <div className="pt-8 border-t border-white/5">

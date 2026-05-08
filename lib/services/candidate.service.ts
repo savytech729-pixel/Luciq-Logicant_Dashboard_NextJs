@@ -141,6 +141,18 @@ export const candidateService = {
 
     if (!candidate) return { jobs: formattedJobs }
 
+    const matches = await prisma.pipelineMatch.findMany({
+      where: { candidateId: candidate.id },
+      select: { jobId: true, status: true },
+      orderBy: { updatedAt: 'desc' },
+    })
+    const appliedByJob = new Map<string, string>()
+    for (const m of matches) {
+      if (!appliedByJob.has(m.jobId)) {
+        appliedByJob.set(m.jobId, m.status || 'SCREENING')
+      }
+    }
+
     // 2. Real Logic Implementation (Multidimensional Matching variant)
     const enriched = formattedJobs.map((job: any) => {
       let skillScore = 0
@@ -160,7 +172,8 @@ export const candidateService = {
       const logisticsScore = (jobNotice === canNotice || canNotice === 'immediate') ? 100 : 70
 
       const score = Math.round((skillScore * 0.7) + (logisticsScore * 0.3))
-      return { ...job, matchScore: score }
+      const pipelineStatus = appliedByJob.get(job.id)
+      return { ...job, matchScore: score, hasApplied: Boolean(pipelineStatus), pipelineStatus: pipelineStatus || null }
     })
 
     return { jobs: enriched }

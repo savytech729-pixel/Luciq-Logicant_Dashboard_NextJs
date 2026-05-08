@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, Users, Briefcase, LogOut, MonitorPlay, Building2, UserCog, Settings, ShieldCheck, Receipt, Target, BrainCircuit } from 'lucide-react'
+import { LayoutDashboard, Users, Briefcase, LogOut, MonitorPlay, Building2, UserCog, Settings, ShieldCheck, Target } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 interface SidebarProps {
@@ -41,15 +41,13 @@ export function Sidebar({ role }: SidebarProps) {
       links: [
         { name: 'Dashboard', href: '/candidate/dashboard', icon: LayoutDashboard },
         { name: 'Available Jobs', href: '/candidate/jobs', icon: Briefcase },
-        { name: 'Applied Jobs', href: '/candidate/dashboard#tracker', icon: Target },
-        { name: 'Interview Practice', href: '/candidate/prep', icon: BrainCircuit },
+        { name: 'Applied Jobs', href: '/candidate/applied', icon: Target },
       ]
     },
     {
       group: 'My Account',
       links: [
         { name: 'My Resume', href: '/candidate/resume', icon: Briefcase },
-        { name: 'Salary Insights', href: '/candidate/market', icon: Receipt },
         { name: 'Settings', href: '/candidate/settings', icon: Settings },
       ]
     }
@@ -75,7 +73,7 @@ export function Sidebar({ role }: SidebarProps) {
               const isActive = exactOnly
                 ? pathname === link.href
                 : pathname === link.href ||
-                  (link.href !== '/candidate/dashboard#tracker' && pathname.startsWith(`${link.href}/`))
+                  pathname.startsWith(`${link.href}/`)
               return (
                 <Link
                   key={link.name}

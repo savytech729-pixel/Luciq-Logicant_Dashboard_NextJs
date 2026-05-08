@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { normalizeDocumentId } from '@/lib/mongodb-id'
 import { deriveImportFallbackEmail } from '@/lib/cv-contact'
+import { hash } from 'bcryptjs'
 
 // GET /api/admin/candidates
 // Fetch all candidates with full recruitment details using raw MongoDB find
@@ -132,10 +133,12 @@ export async function POST(req: Request) {
     let user = await prisma.user.findUnique({ where: { email: candidateEmail } })
     if (!user) {
       // Create a placeholder user for the candidate
+      const placeholderPassword = 'NOT_SET_' + Math.random().toString(36).slice(-8)
+      const hashedPassword = await hash(placeholderPassword, 10)
       user = await prisma.user.create({
         data: {
           email: candidateEmail,
-          password: 'NOT_SET_' + Math.random().toString(36).slice(-8), // Placeholder
+          password: hashedPassword,
           role: 'CANDIDATE',
         }
       })

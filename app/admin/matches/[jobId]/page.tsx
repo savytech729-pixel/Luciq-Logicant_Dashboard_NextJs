@@ -50,6 +50,7 @@ export default function JobMatches() {
   const [jobStatusSaving, setJobStatusSaving] = useState(false)
   const [jobEditOpen, setJobEditOpen] = useState(false)
   const [jobSaving, setJobSaving] = useState(false)
+  const [autoShortlistRunning, setAutoShortlistRunning] = useState(false)
   const [jobForm, setJobForm] = useState({
     title: '',
     description: '',
@@ -76,6 +77,32 @@ export default function JobMatches() {
       .then((r) => r.json())
       .then((d) => setManualCandidates(d.candidates || []))
       .catch(() => null)
+  }, [resolvedJobId])
+
+  useEffect(() => {
+    if (!resolvedJobId) return
+    let mounted = true
+    const runAutoShortlist = async () => {
+      setAutoShortlistRunning(true)
+      try {
+        await fetch('/api/admin/pipeline/auto-shortlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jobId: resolvedJobId }),
+        })
+        if (mounted) {
+          await fetchMatches()
+        }
+      } catch {
+        // non-blocking
+      } finally {
+        if (mounted) setAutoShortlistRunning(false)
+      }
+    }
+    runAutoShortlist()
+    return () => {
+      mounted = false
+    }
   }, [resolvedJobId])
 
   useEffect(() => {
@@ -377,6 +404,9 @@ export default function JobMatches() {
           <p className="text-2xl font-bold text-emerald-300 mt-1">{selectedCount}</p>
         </SurfaceCard>
       </div>
+      {autoShortlistRunning && (
+        <p className="text-xs text-slate-500">Running AI auto-shortlist (50%+ match)…</p>
+      )}
 
       {job && (
         <SurfaceCard className="p-5 border-white/10 space-y-4">
