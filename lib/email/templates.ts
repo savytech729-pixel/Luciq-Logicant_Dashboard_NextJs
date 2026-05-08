@@ -19,7 +19,18 @@ function getAppBaseUrl() {
 }
 
 function getLogoUrl() {
-  return `${getAppBaseUrl()}/luciq-logicant-logo-email.png`;
+  const inlineLogo = (process.env.EMAIL_LOGO_DATA_URI || '').trim();
+  if (inlineLogo) return inlineLogo;
+
+  const explicitLogoUrl = (process.env.EMAIL_LOGO_URL || '').trim();
+  if (explicitLogoUrl) return explicitLogoUrl;
+
+  const appBase = getAppBaseUrl();
+  if (appBase.startsWith('http://localhost')) {
+    // Localhost image links fail for real email recipients.
+    return 'https://dashboard.luciqandlogicant.com/luciq-logicant-logo-email.png';
+  }
+  return `${appBase}/luciq-logicant-logo-email.png`;
 }
 
 function infoCard(title: string, content: string) {
@@ -243,15 +254,17 @@ export function candidateShortlistedTemplate(candidateName: string, jobTitle: st
     'You have been shortlisted',
     `<p style="margin:0 0 10px;">Hi ${escapeHtml(candidateName)},</p>
      <p style="margin:0 0 10px;">Great news - your profile has been <strong>shortlisted</strong> for <strong>${escapeHtml(jobTitle)}</strong>.</p>
+     <p style="margin:0 0 10px;">To take your application forward, please share your further details (latest resume, current/expected CTC, notice period, and preferred interview slots).</p>
      ${infoCard('Next likely steps', actionList([
-       'Recruiter validation call',
+      'Share requested details to proceed quickly',
+      'Recruiter validation call',
        'Interview schedule confirmation',
        'Additional details/documents (if needed)'
      ]))}
      <p style="margin:0;">Please keep your profile updated for smoother coordination.</p>`,
     '#3b82f6'
   );
-  return { subject, html, text: `Hi ${candidateName}, you have been shortlisted for ${jobTitle}.` };
+  return { subject, html, text: `Hi ${candidateName}, you have been shortlisted for ${jobTitle}. Please share your further details to take your application forward.` };
 }
 
 export function candidateRejectedTemplate(candidateName: string, jobTitle: string): EmailTemplate {

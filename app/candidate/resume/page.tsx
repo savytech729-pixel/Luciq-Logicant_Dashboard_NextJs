@@ -27,6 +27,12 @@ export default function CandidateResume() {
     terminationLetterUrl: ''
   })
   const [skillInput, setSkillInput] = useState('')
+  const [docNames, setDocNames] = useState({
+    salarySlip: '',
+    offerLetter: '',
+    terminationLetter: '',
+  })
+  const [docBusy, setDocBusy] = useState(false)
 
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -44,6 +50,11 @@ export default function CandidateResume() {
         terminationLetterUrl: candidate.terminationLetterUrl || ''
       })
       setSkillInput(Array.isArray(candidate.skills) ? candidate.skills.join(', ') : '')
+      setDocNames({
+        salarySlip: candidate.salarySlipUrl ? 'Existing file' : '',
+        offerLetter: candidate.offerLetterUrl ? 'Existing file' : '',
+        terminationLetter: candidate.terminationLetterUrl ? 'Existing file' : '',
+      })
     }
   }, [candidate])
 
@@ -101,6 +112,33 @@ export default function CandidateResume() {
 
   if (loading) return null
 
+  const uploadDocument = (field: 'salarySlipUrl' | 'offerLetterUrl' | 'terminationLetterUrl', file?: File | null) => {
+    if (!file) return
+    if (file.size > 3 * 1024 * 1024) {
+      alert('File too large. Please upload a file under 3MB.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = async (ev) => {
+      const dataUrl = String(ev.target?.result || '')
+      setFormData((prev) => ({ ...prev, [field]: dataUrl }))
+      if (field === 'salarySlipUrl') setDocNames((prev) => ({ ...prev, salarySlip: file.name }))
+      if (field === 'offerLetterUrl') setDocNames((prev) => ({ ...prev, offerLetter: file.name }))
+      if (field === 'terminationLetterUrl') setDocNames((prev) => ({ ...prev, terminationLetter: file.name }))
+      setDocBusy(true)
+      try {
+        const ok = await updateProfile({ [field]: dataUrl })
+        if (!ok) throw new Error('save failed')
+        alert('Document uploaded successfully.')
+      } catch {
+        alert('Failed to upload document. Please try again.')
+      } finally {
+        setDocBusy(false)
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20">
       <div className="flex items-center space-x-4">
@@ -133,12 +171,20 @@ export default function CandidateResume() {
                 onClick={() => fileInputRef.current?.click()}
                 className={`border-2 border-dashed ${isDragging ? 'border-blue-500 bg-blue-500/10' : 'border-white/10 hover:border-white/20 bg-white/[0.02]'} rounded-2xl p-12 text-center cursor-pointer transition-all flex flex-col items-center group`}
               >
-                <input type="file" className="hidden" ref={fileInputRef} onChange={handleFileUpload} accept=".pdf,.doc,.docx,.txt" />
+                <input id="candidate-resume-cv-upload" type="file" className="hidden" ref={fileInputRef} onChange={handleFileUpload} accept=".pdf,.doc,.docx,.txt" />
                 <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                   <UploadCloud className="w-8 h-8 text-blue-400" />
                 </div>
                 <h3 className="text-white font-bold text-lg mb-1">Upload New Resume</h3>
                 <p className="text-slate-400 text-sm">PDF or DOCX. AI will extract your skills and experience instantly.</p>
+                <div className="mt-4 w-full max-w-sm">
+                  <input
+                    type="file"
+                    className="block w-full text-sm text-slate-300 file:mr-3 file:rounded-lg file:border file:border-white/10 file:bg-white/[0.03] file:px-3 file:py-2 file:text-white file:cursor-pointer cursor-pointer"
+                    onChange={handleFileUpload}
+                    accept=".pdf,.doc,.docx,.txt"
+                  />
+                </div>
               </motion.div>
             ) : (
               <motion.div key="parsing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-8 px-4 flex flex-col items-center">
@@ -203,20 +249,48 @@ export default function CandidateResume() {
             <div className="grid md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label className="text-slate-300">Salary Slip</Label>
+                <input
+                  id="candidate-resume-salary-slip-upload"
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                  className="block w-full text-sm text-slate-300 file:mr-3 file:rounded-lg file:border file:border-white/10 file:bg-white/[0.03] file:px-3 file:py-2 file:text-white file:cursor-pointer cursor-pointer"
+                  onChange={(e) => uploadDocument('salarySlipUrl', e.target.files?.[0])}
+                />
                 <div className="flex items-center gap-4">
                   <div className="flex-1 h-12 bg-white/[0.02] border border-white/10 rounded-xl flex items-center px-4 text-xs text-slate-500">
-                    {formData.salarySlipUrl ? 'Uploaded' : 'Not uploaded'}
+                    {formData.salarySlipUrl ? `Uploaded: ${docNames.salarySlip || 'Salary Slip'}` : 'Not uploaded'}
                   </div>
-                  <button type="button" onClick={() => setFormData({...formData, salarySlipUrl: 'linked'})} className="px-4 py-2 bg-blue-600/10 border border-blue-500/20 text-blue-400 rounded-lg text-xs font-bold transition-all">Upload</button>
                 </div>
+                {docBusy ? <p className="text-xs text-slate-400">Uploading...</p> : null}
               </div>
               <div className="space-y-2">
-                <Label className="text-slate-300">Other Documents</Label>
+                <Label className="text-slate-300">Offer Letter</Label>
+                <input
+                  id="candidate-resume-offer-letter-upload"
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                  className="block w-full text-sm text-slate-300 file:mr-3 file:rounded-lg file:border file:border-white/10 file:bg-white/[0.03] file:px-3 file:py-2 file:text-white file:cursor-pointer cursor-pointer"
+                  onChange={(e) => uploadDocument('offerLetterUrl', e.target.files?.[0])}
+                />
                 <div className="flex items-center gap-4">
                   <div className="flex-1 h-12 bg-white/[0.02] border border-white/10 rounded-xl flex items-center px-4 text-xs text-slate-500">
-                    {formData.offerLetterUrl ? 'Uploaded' : 'Not uploaded'}
+                    {formData.offerLetterUrl ? `Uploaded: ${docNames.offerLetter || 'Offer Letter'}` : 'Not uploaded'}
                   </div>
-                  <button type="button" onClick={() => setFormData({...formData, offerLetterUrl: 'linked'})} className="px-4 py-2 bg-blue-600/10 border border-blue-500/20 text-blue-400 rounded-lg text-xs font-bold transition-all">Upload</button>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-slate-300">Termination / Relieving Letter (Optional)</Label>
+              <input
+                id="candidate-resume-termination-letter-upload"
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                className="block w-full text-sm text-slate-300 file:mr-3 file:rounded-lg file:border file:border-white/10 file:bg-white/[0.03] file:px-3 file:py-2 file:text-white file:cursor-pointer cursor-pointer"
+                onChange={(e) => uploadDocument('terminationLetterUrl', e.target.files?.[0])}
+              />
+              <div className="flex items-center gap-4">
+                <div className="flex-1 h-12 bg-white/[0.02] border border-white/10 rounded-xl flex items-center px-4 text-xs text-slate-500">
+                  {formData.terminationLetterUrl ? `Uploaded: ${docNames.terminationLetter || 'Termination Letter'}` : 'Not uploaded'}
                 </div>
               </div>
             </div>
